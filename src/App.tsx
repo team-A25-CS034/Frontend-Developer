@@ -33,9 +33,9 @@ function App() {
     const [output, setOutput] = useState<string>('')
     const [isPredictDisabled, setIsPredictDisabled] = useState<boolean>(true)
 
-    // Hardcoded values for machine forecast
+    // Hardcoded values for machine forecast (fixed to 300 minutes ahead)
     const machineId = 'machine_01'
-    const forecastDays = 1
+    const forecastMinutes = 300
 
     const samplePayload = {
         Air_temperature: 298.4,
@@ -197,7 +197,9 @@ function App() {
             return
         }
 
-        setOutput(`Generating ${forecastDays}-day forecast for ${machineId}...`)
+        setOutput(
+            `Generating ${forecastMinutes}-minute forecast for ${machineId}...`
+        )
 
         try {
             const resp = await fetch(`${API_BASE_URL}/forecast`, {
@@ -208,47 +210,47 @@ function App() {
                 },
                 body: JSON.stringify({
                     machine_id: machineId,
-                    forecast_days: forecastDays,
+                    forecast_minutes: forecastMinutes,
                 }),
             })
 
             const json = await resp.json()
 
             if (resp.ok) {
-                // Format forecast data for display
+                // Format forecast data for display (minute-based forecast)
                 let outputText = `Forecast Generated Successfully!\n\n`
                 outputText += `Machine: ${json.machine_id}\n`
-                outputText += `Forecast Days: ${json.forecast_days}\n`
+                outputText += `Forecast Minutes: ${json.forecast_minutes}\n`
                 outputText += `Created: ${new Date(
                     json.created_at
                 ).toLocaleString()}\n\n`
                 outputText += `Forecast Data:\n\n`
 
-                // Get day +1 data for prediction
-                let dayPlusOne: ForecastDay | null = null
+                // Get minute +1 data for prediction
+                let minutePlusOne: ForecastDay | null = null
 
                 for (let idx = 0; idx < json.forecast_data.length; idx++) {
-                    const day: ForecastDay = json.forecast_data[idx]
+                    const minute: ForecastDay = json.forecast_data[idx]
 
-                    // Store day +1 for prediction
-                    if (day.day_ahead === 1) {
-                        dayPlusOne = day
+                    // Store minute +1 (first step) for prediction
+                    if (minute.day_ahead === 1) {
+                        minutePlusOne = minute
                     }
 
-                    outputText += `Day +${day.day_ahead} (${new Date(
-                        day.timestamp
-                    ).toLocaleDateString()}):\n`
-                    outputText += `  Air Temp: ${day.air_temperature.toFixed(
+                    outputText += `Minute +${minute.day_ahead} (${new Date(
+                        minute.timestamp
+                    ).toLocaleString()}):\n`
+                    outputText += `  Air Temp: ${minute.air_temperature.toFixed(
                         2
                     )} K\n`
-                    outputText += `  Process Temp: ${day.process_temperature.toFixed(
+                    outputText += `  Process Temp: ${minute.process_temperature.toFixed(
                         2
                     )} K\n`
-                    outputText += `  Rotational Speed: ${day.rotational_speed.toFixed(
+                    outputText += `  Rotational Speed: ${minute.rotational_speed.toFixed(
                         0
                     )} rpm\n`
-                    outputText += `  Torque: ${day.torque.toFixed(2)} Nm\n`
-                    outputText += `  Tool Wear: ${day.tool_wear.toFixed(
+                    outputText += `  Torque: ${minute.torque.toFixed(2)} Nm\n`
+                    outputText += `  Tool Wear: ${minute.tool_wear.toFixed(
                         0
                     )} min\n`
                     if (idx < json.forecast_data.length - 1) {
@@ -258,21 +260,21 @@ function App() {
 
                 setOutput(outputText)
 
-                // Automatically run prediction on day +1 data
-                if (dayPlusOne) {
+                // Automatically run prediction on minute +1 data
+                if (minutePlusOne) {
                     setOutput(
                         (prev) =>
-                            prev + `\n\nRunning prediction for Day +1...\n`
+                            prev + `\n\nRunning prediction for Minute +1...\n`
                     )
 
                     // Prepare payload for prediction
                     const predictionPayload = {
-                        Air_temperature: dayPlusOne.air_temperature,
-                        Process_temperature: dayPlusOne.process_temperature,
-                        Rotational_speed: dayPlusOne.rotational_speed,
-                        Torque: dayPlusOne.torque,
-                        Tool_wear: dayPlusOne.tool_wear,
-                        Type: dayPlusOne.machine_type || 'M',
+                        Air_temperature: minutePlusOne.air_temperature,
+                        Process_temperature: minutePlusOne.process_temperature,
+                        Rotational_speed: minutePlusOne.rotational_speed,
+                        Torque: minutePlusOne.torque,
+                        Tool_wear: minutePlusOne.tool_wear,
+                        Type: minutePlusOne.machine_type || 'M',
                     }
 
                     const predictionResult = await runPrediction(
@@ -332,6 +334,65 @@ function App() {
         }
     }
 
+    // Show DB data handler — calls the admin-protected dump endpoint using
+    // the password from Vite env (VITE_API_PASSWORD). This avoids requiring
+    // JWT and is intended for local testing only.
+    const handleShowDB = async (limit = 20) => {
+        setOutput(`Fetching last ${limit} readings for ${machineId}...`)
+
+        try {
+            const resp = await fetch(
+                `${API_BASE_URL}/readings-dump?machine_id=${encodeURIComponent(
+                    machineId
+                )}&limit=${limit}`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'X-Admin-Password': PASSWORD,
+                    },
+                }
+            )
+
+            const json = await resp.json()
+
+            if (resp.ok) {
+                let outputText = `Readings for ${json.machine_id} (count=${json.count})\n\n`
+
+                for (let i = 0; i < json.readings.length; i++) {
+                    const r = json.readings[i]
+                    outputText += `#${i + 1} ${
+                        r.timestamp
+                            ? new Date(r.timestamp).toLocaleString()
+                            : r.timestamp
+                    } - `
+                    outputText += `Air: ${
+                        r.air_temperature ?? 'N/A'
+                    }, Process: ${r.process_temperature ?? 'N/A'}, `
+                    outputText += `Rot: ${
+                        r.rotational_speed ?? 'N/A'
+                    }, Torque: ${r.torque ?? 'N/A'}, Tool wear: ${
+                        r.tool_wear ?? 'N/A'
+                    }\n`
+                }
+
+                setOutput(outputText)
+            } else {
+                setOutput(
+                    `Failed to fetch readings: ${JSON.stringify(json, null, 2)}`
+                )
+                if (resp.status === 401) {
+                    setIsPredictDisabled(true)
+                    setAccessToken(null)
+                    localStorage.removeItem('accessToken')
+                    localStorage.removeItem('tokenExpiry')
+                }
+            }
+        } catch (err) {
+            console.error('Fetch readings failed', err)
+            setOutput(`Request failed: ${err}`)
+        }
+    }
+
     return (
         <>
             <h2>Machine Monitoring - Authenticated</h2>
@@ -357,7 +418,14 @@ function App() {
                     onClick={handleForecast}
                     disabled={isPredictDisabled}
                 >
-                    +1 Day Forecast
+                    +300 Minute Forecast
+                </button>
+                <button
+                    onClick={() => handleShowDB(20)}
+                    disabled={isPredictDisabled}
+                    style={{ marginLeft: '8px' }}
+                >
+                    Show DB Data (last 20)
                 </button>
             </div>
 
