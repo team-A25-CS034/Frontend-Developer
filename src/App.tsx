@@ -279,7 +279,7 @@ function App() {
     // Show DB data handler — calls the admin-protected dump endpoint using
     // the password from Vite env (VITE_API_PASSWORD). This avoids requiring
     // JWT and is intended for local testing only.
-    const handleShowDB = async (limit = 20) => {
+    const handleShowDB = async (limit = 500) => {
         setOutput(`Fetching last ${limit} readings for ${machineId}...`)
 
         try {
@@ -363,11 +363,11 @@ function App() {
                     +300 Minute Forecast
                 </button>
                 <button
-                    onClick={() => handleShowDB(20)}
+                    onClick={() => handleShowDB()}
                     disabled={isPredictDisabled}
                     style={{ marginLeft: '8px' }}
                 >
-                    Show DB Data (last 20)
+                    Show DB Data (last 500)
                 </button>
             </div>
 
