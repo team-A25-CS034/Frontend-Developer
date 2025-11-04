@@ -226,16 +226,10 @@ function App() {
                 ).toLocaleString()}\n\n`
                 outputText += `Forecast Data:\n\n`
 
-                // Get minute +1 data for prediction
-                let minutePlusOne: ForecastDay | null = null
-
                 for (let idx = 0; idx < json.forecast_data.length; idx++) {
                     const minute: ForecastDay = json.forecast_data[idx]
 
-                    // Store minute +1 (first step) for prediction
-                    if (minute.day_ahead === 1) {
-                        minutePlusOne = minute
-                    }
+                    // (no automatic prediction anymore)
 
                     outputText += `Minute +${minute.day_ahead} (${new Date(
                         minute.timestamp
@@ -260,61 +254,9 @@ function App() {
 
                 setOutput(outputText)
 
-                // Automatically run prediction on minute +1 data
-                if (minutePlusOne) {
-                    setOutput(
-                        (prev) =>
-                            prev + `\n\nRunning prediction for Minute +1...\n`
-                    )
-
-                    // Prepare payload for prediction
-                    const predictionPayload = {
-                        Air_temperature: minutePlusOne.air_temperature,
-                        Process_temperature: minutePlusOne.process_temperature,
-                        Rotational_speed: minutePlusOne.rotational_speed,
-                        Torque: minutePlusOne.torque,
-                        Tool_wear: minutePlusOne.tool_wear,
-                        Type: minutePlusOne.machine_type || 'M',
-                    }
-
-                    const predictionResult = await runPrediction(
-                        predictionPayload
-                    )
-
-                    if (predictionResult.success) {
-                        setOutput(
-                            (prev) =>
-                                prev +
-                                `\n--- MACHINE STATUS PREDICTION ---\n` +
-                                `Status: ${predictionResult.data.prediction_label}\n` +
-                                `Confidence: ${
-                                    predictionResult.data.probabilities
-                                        ? `${(
-                                              Math.max(
-                                                  ...predictionResult.data
-                                                      .probabilities
-                                              ) * 100
-                                          ).toFixed(1)}%`
-                                        : 'N/A'
-                                }\n` +
-                                `\nFull Prediction:\n${JSON.stringify(
-                                    predictionResult.data,
-                                    null,
-                                    2
-                                )}`
-                        )
-                    } else {
-                        setOutput(
-                            (prev) =>
-                                prev +
-                                `\nPrediction failed: ${JSON.stringify(
-                                    predictionResult.error,
-                                    null,
-                                    2
-                                )}`
-                        )
-                    }
-                }
+                // Auto-prediction after generating the 300-minute forecast
+                // has been removed per request — no automatic machine status
+                // prediction will be performed here.
             } else {
                 setOutput(`Forecast failed:\n${JSON.stringify(json, null, 2)}`)
                 if (resp.status === 401) {
