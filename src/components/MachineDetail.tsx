@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import {
+    ResponsiveContainer,
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+} from 'recharts'
 
 type Reading = {
     timestamp?: string | number
@@ -12,7 +22,7 @@ type Reading = {
     [key: string]: any
 }
 
-export default function MachineDetail(): JSX.Element {
+export default function MachineDetail() {
     const { id } = useParams()
     const machineId = id ?? ''
     const navigate = useNavigate()
@@ -50,9 +60,10 @@ export default function MachineDetail(): JSX.Element {
                     throw new Error(`${res.status} ${res.statusText} ${txt}`)
                 }
 
+                // read the raw body text once, then inspect/parse it
+                const raw = await res.text()
                 if (ct.includes('text/html')) {
-                    const html = await res.text()
-                    const snippet = html.slice(0, 500)
+                    const snippet = raw.slice(0, 500)
                     throw new Error(
                         'Received HTML response instead of JSON. This usually means the request hit the frontend dev server or a wrong URL. Response snippet: ' +
                             snippet
@@ -60,9 +71,8 @@ export default function MachineDetail(): JSX.Element {
                 }
 
                 try {
-                    return await res.json()
-                } catch (jsonErr) {
-                    const raw = await res.text()
+                    return JSON.parse(raw)
+                } catch {
                     throw new Error(
                         'Invalid JSON response: ' + raw.slice(0, 1000)
                     )
@@ -104,6 +114,33 @@ export default function MachineDetail(): JSX.Element {
             })
     }, [machineId, API_BASE])
 
+    // prepare chart data: sort by timestamp when possible
+    const chartData = React.useMemo(() => {
+        if (!readings || readings.length === 0) return []
+        const arr = [...readings]
+        arr.sort((a, b) => {
+            const ta = a.timestamp
+                ? new Date(a.timestamp).getTime()
+                : Number.NaN
+            const tb = b.timestamp
+                ? new Date(b.timestamp).getTime()
+                : Number.NaN
+            if (Number.isNaN(ta) || Number.isNaN(tb)) return 0
+            return ta - tb
+        })
+        return arr.map((r, idx) => ({
+            time:
+                r.timestamp && !Number.isNaN(new Date(r.timestamp).getTime())
+                    ? new Date(r.timestamp).toLocaleString()
+                    : String(idx + 1),
+            process_temperature: r.process_temperature ?? null,
+            torque: r.torque ?? null,
+            air_temperature: r.air_temperature ?? null,
+            tool_wear: r.tool_wear ?? null,
+            rotational_speed: r.rotational_speed ?? null,
+        }))
+    }, [readings])
+
     return (
         <div className='p-6'>
             <div className='mb-4'>
@@ -122,20 +159,153 @@ export default function MachineDetail(): JSX.Element {
             {loading && <div>Loading readings...</div>}
             {error && <div className='text-red-600'>Error: {error}</div>}
 
-            {!loading && !error && readings && (
+            {!loading && !error && chartData.length > 0 && (
                 <div>
                     <p className='mb-2'>
-                        Showing {readings.length} readings (up to 300).
+                        Showing {chartData.length} readings (up to 300).
                     </p>
-                    <div className='overflow-auto max-h-[60vh] bg-white border rounded p-3'>
-                        <pre className='text-sm'>
-                            {JSON.stringify(readings, null, 2)}
-                        </pre>
+
+                    <div className='grid gap-6'>
+                        {/* Process Temperature */}
+                        <div className='bg-white border rounded p-3'>
+                            <h3 className='font-medium mb-2'>
+                                Process Temperature
+                            </h3>
+                            <ResponsiveContainer
+                                width='100%'
+                                height={200}
+                            >
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis
+                                        dataKey='time'
+                                        minTickGap={20}
+                                    />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='process_temperature'
+                                        stroke='#ef4444'
+                                        dot={false}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Torque */}
+                        <div className='bg-white border rounded p-3'>
+                            <h3 className='font-medium mb-2'>Torque</h3>
+                            <ResponsiveContainer
+                                width='100%'
+                                height={200}
+                            >
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis
+                                        dataKey='time'
+                                        minTickGap={20}
+                                    />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='torque'
+                                        stroke='#06b6d4'
+                                        dot={false}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Air Temperature */}
+                        <div className='bg-white border rounded p-3'>
+                            <h3 className='font-medium mb-2'>
+                                Air Temperature
+                            </h3>
+                            <ResponsiveContainer
+                                width='100%'
+                                height={200}
+                            >
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis
+                                        dataKey='time'
+                                        minTickGap={20}
+                                    />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='air_temperature'
+                                        stroke='#f59e0b'
+                                        dot={false}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Tool Wear */}
+                        <div className='bg-white border rounded p-3'>
+                            <h3 className='font-medium mb-2'>Tool Wear</h3>
+                            <ResponsiveContainer
+                                width='100%'
+                                height={200}
+                            >
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis
+                                        dataKey='time'
+                                        minTickGap={20}
+                                    />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='tool_wear'
+                                        stroke='#7c3aed'
+                                        dot={false}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Rotational Speed */}
+                        <div className='bg-white border rounded p-3'>
+                            <h3 className='font-medium mb-2'>
+                                Rotational Speed
+                            </h3>
+                            <ResponsiveContainer
+                                width='100%'
+                                height={200}
+                            >
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis
+                                        dataKey='time'
+                                        minTickGap={20}
+                                    />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='rotational_speed'
+                                        stroke='#16a34a'
+                                        dot={false}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {!loading && !error && !readings && (
+            {!loading && !error && chartData.length === 0 && (
                 <div>No readings returned.</div>
             )}
         </div>
