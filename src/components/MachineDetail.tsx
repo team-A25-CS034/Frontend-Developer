@@ -28,6 +28,7 @@ export default function MachineDetail() {
     const navigate = useNavigate()
     const [readings, setReadings] = useState<Reading[] | null>(null)
     const [forecast, setForecast] = useState<Reading[] | null>(null)
+    const [classification, setClassification] = useState<any | null>(null)
     const [loading, setLoading] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -155,6 +156,66 @@ export default function MachineDetail() {
             })
     }, [machineId, API_BASE])
 
+    // When readings are available, classify the latest reading via POST /predict
+    useEffect(() => {
+        if (!readings || readings.length === 0) {
+            setClassification(null)
+            return
+        }
+
+        // find latest reading by timestamp if available
+        const latest = readings.reduce((best: any, cur: any) => {
+            try {
+                const tbest = best && best.timestamp ? new Date(best.timestamp).getTime() : Number.NaN
+                const tcur = cur && cur.timestamp ? new Date(cur.timestamp).getTime() : Number.NaN
+                if (Number.isNaN(tbest) && !Number.isNaN(tcur)) return cur
+                if (!Number.isNaN(tbest) && Number.isNaN(tcur)) return best
+                return tcur > tbest ? cur : best
+            } catch (e) {
+                return best
+            }
+        }, readings[0])
+
+        const token = localStorage.getItem('access_token')
+
+        const payload = {
+            Air_temperature: latest.air_temperature ?? latest.process_temperature ?? 0,
+            Process_temperature: latest.process_temperature ?? latest.air_temperature ?? 0,
+            Rotational_speed: latest.rotational_speed ?? 0,
+            Torque: latest.torque ?? 0,
+            Tool_wear: latest.tool_wear ?? 0,
+            Type: (latest.machine_type ?? latest.machine_id)?.toString()?.startsWith('H') ? 'H' : 'M',
+        }
+
+        const predictUrl = `${API_BASE}/predict`
+
+        fetch(predictUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(payload),
+        })
+            .then(async (res) => {
+                const txt = await res.text()
+                if (!res.ok) throw new Error(`${res.status} ${res.statusText} ${txt}`)
+                try {
+                    return JSON.parse(txt)
+                } catch {
+                    throw new Error('Invalid JSON from predict: ' + txt.slice(0, 500))
+                }
+            })
+            .then((data) => {
+                setClassification(data)
+            })
+            .catch((err: any) => {
+                // keep classification null but show error in UI if needed
+                setClassification({ error: String(err) })
+            })
+    }, [readings, API_BASE])
+
     // prepare combined chart data: observed (db) + forecast series
     const chartData = React.useMemo(() => {
         const obs = Array.isArray(readings) ? [...readings] : []
@@ -217,6 +278,47 @@ export default function MachineDetail() {
             <h1 className='text-2xl font-semibold mb-4'>
                 Machine Detail — {machineId}
             </h1>
+
+            {/* Classification result for latest reading */}
+            <div className='mb-4'>
+                {classification ? (
+                    classification.error ? (
+                        <div className='p-3 bg-yellow-50 border rounded text-sm text-red-600'>
+                            Classification error: {classification.error}
+                        </div>
+                    ) : (
+                        <div className='p-3 bg-white border rounded'>
+                            <div className='flex items-center justify-between'>
+                                <div>
+                                    <div className='text-sm text-slate-500'>Latest classification</div>
+                                    <div className='text-lg font-semibold'>
+                                        {classification.prediction_label ?? classification.label ?? 'N/A'}
+                                    </div>
+                                    <div className='text-xs text-slate-600'>
+                                        Code: {classification.prediction_numeric ?? classification.code ?? 'N/A'}
+                                    </div>
+                                </div>
+                                <div className='text-right'>
+                                    {classification.probabilities ? (
+                                        <div className='text-xs'>
+                                            Probabilities:
+                                            <div className='mt-1 text-xs text-slate-600'>
+                                                {classification.probabilities
+                                                    .map((p: number, i: number) => `C${i}: ${p.toFixed(2)}`)
+                                                    .join(' · ')}
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </div>
+                        </div>
+                    )
+                ) : (
+                    <div className='p-3 bg-gray-50 border rounded text-sm text-slate-600'>
+                        Classification: waiting for latest reading...
+                    </div>
+                )}
+            </div>
 
             {loading && <div>Loading readings...</div>}
             {error && <div className='text-red-600'>Error: {error}</div>}
