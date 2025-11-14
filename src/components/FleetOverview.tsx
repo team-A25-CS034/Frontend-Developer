@@ -20,74 +20,16 @@ import {
     TableRow,
 } from './ui/table'
 
-// Mock data (fallback)
-const machines = [
-    {
-        id: 'M001',
-        name: 'Pump Station A-12',
-        site: 'Plant North',
-        status: 'Normal',
-        riskScore: 12,
-        location: 'Building A, Floor 2',
-        lastMaintenance: '2025-10-15',
-    },
-    {
-        id: 'M002',
-        name: 'Compressor B-04',
-        site: 'Plant South',
-        status: 'Watch',
-        riskScore: 58,
-        location: 'Building B, Floor 1',
-        lastMaintenance: '2025-09-20',
-    },
-    {
-        id: 'M003',
-        name: 'Motor Drive C-33',
-        site: 'Plant North',
-        status: 'Risk',
-        riskScore: 87,
-        location: 'Building C, Floor 3',
-        lastMaintenance: '2025-08-10',
-    },
-    {
-        id: 'M004',
-        name: 'Turbine D-21',
-        site: 'Plant East',
-        status: 'Normal',
-        riskScore: 24,
-        location: 'Building D, Floor 1',
-        lastMaintenance: '2025-11-01',
-    },
-    {
-        id: 'M005',
-        name: 'Generator E-15',
-        site: 'Plant South',
-        status: 'Watch',
-        riskScore: 64,
-        location: 'Building E, Floor 2',
-        lastMaintenance: '2025-09-15',
-    },
-    {
-        id: 'M006',
-        name: 'Cooling Unit F-08',
-        site: 'Plant East',
-        status: 'Normal',
-        riskScore: 18,
-        location: 'Building F, Floor 1',
-        lastMaintenance: '2025-10-28',
-    },
-]
-
 export default function FleetOverview() {
     const navigate = useNavigate()
     const [searchQuery, setSearchQuery] = useState('')
     const [siteFilter, setSiteFilter] = useState('all')
     const [statusFilter, setStatusFilter] = useState('all')
     const API_BASE =
-        import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+        (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
-    // machinesData holds either the fetched machines list or the fallback mock
-    const [machinesData, setMachinesData] = useState(machines)
+    // machinesData holds the fetched machines list (starts empty)
+    const [machinesData, setMachinesData] = useState<any[]>([])
     const [loadingMachines, setLoadingMachines] = useState(false)
     const [machinesError, setMachinesError] = useState<string | null>(null)
 
@@ -130,12 +72,9 @@ export default function FleetOverview() {
                     throw new Error('Invalid machines payload')
                 }
             } catch (err: any) {
-                console.warn(
-                    'Could not fetch machines from API, using mock data:',
-                    err
-                )
+                console.warn('Could not fetch machines from API:', err)
                 setMachinesError(err?.message || String(err))
-                setMachinesData(machines)
+                setMachinesData([])
             } finally {
                 setLoadingMachines(false)
             }
@@ -175,10 +114,14 @@ export default function FleetOverview() {
         return 'text-green-600'
     }
 
-    const filteredMachines = machinesData.filter((machine) => {
+    const filteredMachines = machinesData.filter((machine: any) => {
         const matchesSearch =
-            machine.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            machine.id.toLowerCase().includes(searchQuery.toLowerCase())
+            String(machine.name || '')
+                .toLowerCase()
+                .includes(searchQuery.toLowerCase()) ||
+            String(machine.id || '')
+                .toLowerCase()
+                .includes(searchQuery.toLowerCase())
         const matchesSite = siteFilter === 'all' || machine.site === siteFilter
         const matchesStatus =
             statusFilter === 'all' || machine.status === statusFilter
@@ -188,9 +131,9 @@ export default function FleetOverview() {
 
     const stats = {
         total: machinesData.length,
-        normal: machinesData.filter((m) => m.status === 'Normal').length,
-        watch: machinesData.filter((m) => m.status === 'Watch').length,
-        risk: machinesData.filter((m) => m.status === 'Risk').length,
+        normal: machinesData.filter((m: any) => m.status === 'Normal').length,
+        watch: machinesData.filter((m: any) => m.status === 'Watch').length,
+        risk: machinesData.filter((m: any) => m.status === 'Risk').length,
     }
 
     return (
@@ -281,7 +224,7 @@ export default function FleetOverview() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredMachines.map((machine) => (
+                        {filteredMachines.map((machine: any) => (
                             <TableRow key={machine.id}>
                                 <TableCell>{machine.id}</TableCell>
                                 <TableCell>{machine.name}</TableCell>
