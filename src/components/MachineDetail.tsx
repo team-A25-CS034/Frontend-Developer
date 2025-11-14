@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import {
     ResponsiveContainer,
     LineChart,
@@ -284,9 +285,11 @@ export default function MachineDetail() {
             <div className='mb-4'>
                 <button
                     onClick={() => navigate(-1)}
-                    className='px-3 py-1 rounded bg-gray-200 hover:bg-gray-250'
+                    className='inline-flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm cursor-pointer'
+                    aria-label='Back'
                 >
-                    Back
+                    <ArrowLeft className='w-4 h-4' />
+                    <span className='text-sm font-medium'>Back</span>
                 </button>
             </div>
 
