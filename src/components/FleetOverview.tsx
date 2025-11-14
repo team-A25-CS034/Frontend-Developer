@@ -62,12 +62,119 @@ export default function FleetOverview() {
                         id: m.machine_id,
                         name: m.machine_id,
                         site: 'Unknown',
-                        status: 'Normal',
+                        status: 'Unknown',
                         riskScore: 0,
                         location: '',
                         lastMaintenance: '',
                     }))
                     setMachinesData(mapped)
+
+                    // For each machine, fetch latest reading and classification (/predict)
+                    try {
+                        const classifyPromises = mapped.map(
+                            async (mach: any) => {
+                                try {
+                                    // get latest reading
+                                    const rres = await fetch(
+                                        `${API_BASE}/readings?machine_id=${encodeURIComponent(
+                                            mach.id
+                                        )}&limit=1`,
+                                        {
+                                            headers: {
+                                                Accept: 'application/json',
+                                                Authorization: `Bearer ${token}`,
+                                            },
+                                        }
+                                    )
+                                    if (!rres.ok)
+                                        return { id: mach.id, label: null }
+                                    const rdata = await rres
+                                        .json()
+                                        .catch(() => null)
+                                    const latest = Array.isArray(
+                                        rdata?.readings
+                                    )
+                                        ? rdata.readings[0]
+                                        : Array.isArray(rdata)
+                                        ? rdata[0]
+                                        : null
+
+                                    if (!latest)
+                                        return { id: mach.id, label: null }
+
+                                    const payload = {
+                                        Air_temperature:
+                                            latest.air_temperature ??
+                                            latest.process_temperature ??
+                                            0,
+                                        Process_temperature:
+                                            latest.process_temperature ??
+                                            latest.air_temperature ??
+                                            0,
+                                        Rotational_speed:
+                                            latest.rotational_speed ?? 0,
+                                        Torque: latest.torque ?? 0,
+                                        Tool_wear: latest.tool_wear ?? 0,
+                                        Type: (
+                                            latest.machine_type ??
+                                            latest.machine_id
+                                        )
+                                            ?.toString()
+                                            ?.startsWith('H')
+                                            ? 'H'
+                                            : 'M',
+                                    }
+
+                                    const pres = await fetch(
+                                        `${API_BASE}/predict`,
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type':
+                                                    'application/json',
+                                                Accept: 'application/json',
+                                                Authorization: `Bearer ${token}`,
+                                            },
+                                            body: JSON.stringify(payload),
+                                        }
+                                    )
+
+                                    if (!pres.ok)
+                                        return { id: mach.id, label: null }
+                                    const presj = await pres
+                                        .json()
+                                        .catch(() => null)
+                                    const label =
+                                        presj?.prediction_label ??
+                                        presj?.label ??
+                                        null
+                                    return { id: mach.id, label }
+                                } catch (e) {
+                                    console.warn(
+                                        'Classify error for',
+                                        mach.id,
+                                        e
+                                    )
+                                    return { id: mach.id, label: null }
+                                }
+                            }
+                        )
+
+                        const classified = await Promise.all(classifyPromises)
+
+                        // apply classification labels to machinesData
+                        setMachinesData((prev) =>
+                            prev.map((m) => {
+                                const found = classified.find(
+                                    (c: any) => c.id === m.id
+                                )
+                                if (!found || !found.label) return m
+                                return { ...m, status: String(found.label) }
+                            })
+                        )
+                    } catch (e) {
+                        console.warn('Error classifying machines', e)
+                    }
                 } else {
                     throw new Error('Invalid machines payload')
                 }
@@ -84,28 +191,38 @@ export default function FleetOverview() {
     }, [])
 
     const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Normal':
-                return 'bg-green-100 text-green-800 border-green-200'
-            case 'Watch':
-                return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-            case 'Risk':
-                return 'bg-red-100 text-red-800 border-red-200'
-            default:
-                return 'bg-slate-100 text-slate-800 border-slate-200'
-        }
+        // status may be a free-form classification label now
+        if (!status) return 'bg-slate-100 text-slate-800 border-slate-200'
+        if (
+            status === 'No Failure' ||
+            status.toLowerCase().includes('no failure')
+        )
+            return 'bg-green-100 text-green-800 border-green-200'
+        if (status.toLowerCase().includes('tool wear'))
+            return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+        if (
+            status.toLowerCase().includes('failure') ||
+            status.toLowerCase().includes('fail')
+        )
+            return 'bg-red-100 text-red-800 border-red-200'
+        return 'bg-slate-100 text-slate-800 border-slate-200'
     }
 
     const getStatusIcon = (status: string) => {
-        switch (status) {
-            case 'Normal':
-                return <CheckCircle className='w-4 h-4' />
-            case 'Watch':
-            case 'Risk':
-                return <AlertTriangle className='w-4 h-4' />
-            default:
-                return null
-        }
+        if (!status) return null
+        if (
+            status === 'No Failure' ||
+            status.toLowerCase().includes('no failure')
+        )
+            return <CheckCircle className='w-4 h-4' />
+        if (status.toLowerCase().includes('tool wear'))
+            return <AlertTriangle className='w-4 h-4' />
+        if (
+            status.toLowerCase().includes('failure') ||
+            status.toLowerCase().includes('fail')
+        )
+            return <AlertTriangle className='w-4 h-4' />
+        return null
     }
 
     const getRiskColor = (score: number) => {
@@ -131,9 +248,22 @@ export default function FleetOverview() {
 
     const stats = {
         total: machinesData.length,
-        normal: machinesData.filter((m: any) => m.status === 'Normal').length,
-        watch: machinesData.filter((m: any) => m.status === 'Watch').length,
-        risk: machinesData.filter((m: any) => m.status === 'Risk').length,
+        normal: machinesData.filter(
+            (m: any) =>
+                m.status &&
+                (m.status === 'No Failure' ||
+                    String(m.status).toLowerCase().includes('no failure'))
+        ).length,
+        watch: machinesData.filter(
+            (m: any) =>
+                m.status && String(m.status).toLowerCase().includes('tool wear')
+        ).length,
+        risk: machinesData.filter(
+            (m: any) =>
+                m.status &&
+                (String(m.status).toLowerCase().includes('failure') ||
+                    String(m.status).toLowerCase().includes('fail'))
+        ).length,
     }
 
     return (
