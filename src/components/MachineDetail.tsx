@@ -166,8 +166,14 @@ export default function MachineDetail() {
         // find latest reading by timestamp if available
         const latest = readings.reduce((best: any, cur: any) => {
             try {
-                const tbest = best && best.timestamp ? new Date(best.timestamp).getTime() : Number.NaN
-                const tcur = cur && cur.timestamp ? new Date(cur.timestamp).getTime() : Number.NaN
+                const tbest =
+                    best && best.timestamp
+                        ? new Date(best.timestamp).getTime()
+                        : Number.NaN
+                const tcur =
+                    cur && cur.timestamp
+                        ? new Date(cur.timestamp).getTime()
+                        : Number.NaN
                 if (Number.isNaN(tbest) && !Number.isNaN(tcur)) return cur
                 if (!Number.isNaN(tbest) && Number.isNaN(tcur)) return best
                 return tcur > tbest ? cur : best
@@ -179,12 +185,18 @@ export default function MachineDetail() {
         const token = localStorage.getItem('access_token')
 
         const payload = {
-            Air_temperature: latest.air_temperature ?? latest.process_temperature ?? 0,
-            Process_temperature: latest.process_temperature ?? latest.air_temperature ?? 0,
+            Air_temperature:
+                latest.air_temperature ?? latest.process_temperature ?? 0,
+            Process_temperature:
+                latest.process_temperature ?? latest.air_temperature ?? 0,
             Rotational_speed: latest.rotational_speed ?? 0,
             Torque: latest.torque ?? 0,
             Tool_wear: latest.tool_wear ?? 0,
-            Type: (latest.machine_type ?? latest.machine_id)?.toString()?.startsWith('H') ? 'H' : 'M',
+            Type: (latest.machine_type ?? latest.machine_id)
+                ?.toString()
+                ?.startsWith('H')
+                ? 'H'
+                : 'M',
         }
 
         const predictUrl = `${API_BASE}/predict`
@@ -200,11 +212,14 @@ export default function MachineDetail() {
         })
             .then(async (res) => {
                 const txt = await res.text()
-                if (!res.ok) throw new Error(`${res.status} ${res.statusText} ${txt}`)
+                if (!res.ok)
+                    throw new Error(`${res.status} ${res.statusText} ${txt}`)
                 try {
                     return JSON.parse(txt)
                 } catch {
-                    throw new Error('Invalid JSON from predict: ' + txt.slice(0, 500))
+                    throw new Error(
+                        'Invalid JSON from predict: ' + txt.slice(0, 500)
+                    )
                 }
             })
             .then((data) => {
@@ -290,12 +305,19 @@ export default function MachineDetail() {
                         <div className='p-3 bg-white border rounded'>
                             <div className='flex items-center justify-between'>
                                 <div>
-                                    <div className='text-sm text-slate-500'>Latest classification</div>
+                                    <div className='text-sm text-slate-500'>
+                                        Latest classification
+                                    </div>
                                     <div className='text-lg font-semibold'>
-                                        {classification.prediction_label ?? classification.label ?? 'N/A'}
+                                        {classification.prediction_label ??
+                                            classification.label ??
+                                            'N/A'}
                                     </div>
                                     <div className='text-xs text-slate-600'>
-                                        Code: {classification.prediction_numeric ?? classification.code ?? 'N/A'}
+                                        Code:{' '}
+                                        {classification.prediction_numeric ??
+                                            classification.code ??
+                                            'N/A'}
                                     </div>
                                 </div>
                                 <div className='text-right'>
@@ -304,7 +326,15 @@ export default function MachineDetail() {
                                             Probabilities:
                                             <div className='mt-1 text-xs text-slate-600'>
                                                 {classification.probabilities
-                                                    .map((p: number, i: number) => `C${i}: ${p.toFixed(2)}`)
+                                                    .map(
+                                                        (
+                                                            p: number,
+                                                            i: number
+                                                        ) =>
+                                                            `C${i}: ${p.toFixed(
+                                                                2
+                                                            )}`
+                                                    )
                                                     .join(' · ')}
                                             </div>
                                         </div>
