@@ -27,6 +27,7 @@ export default function MachineDetail() {
     const machineId = id ?? ''
     const navigate = useNavigate()
     const [readings, setReadings] = useState<Reading[] | null>(null)
+    const [forecast, setForecast] = useState<Reading[] | null>(null)
     const [loading, setLoading] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -39,48 +40,61 @@ export default function MachineDetail() {
             setLoading(false)
             return
         }
-
         const token = localStorage.getItem('access_token')
-        const url = `${API_BASE}/readings?machine_id=${encodeURIComponent(
+
+        const fetchJson = async (input: RequestInfo, init?: RequestInit) => {
+            const res = await fetch(input, init)
+            const ct = (res.headers.get('content-type') || '').toLowerCase()
+            const raw = await res.text()
+            if (!res.ok) {
+                throw new Error(`${res.status} ${res.statusText} ${raw}`)
+            }
+            if (ct.includes('text/html')) {
+                throw new Error(
+                    'Received HTML response instead of JSON. Check API base or proxy. Snippet: ' +
+                        raw.slice(0, 500)
+                )
+            }
+            try {
+                return JSON.parse(raw)
+            } catch (e) {
+                throw new Error('Invalid JSON response: ' + raw.slice(0, 1000))
+            }
+        }
+
+        const readingsUrl = `${API_BASE}/readings?machine_id=${encodeURIComponent(
             machineId
         )}&limit=300`
+        const forecastUrl = `${API_BASE}/forecast`
 
         setLoading(true)
-        fetch(url, {
-            method: 'GET',
-            headers: {
-                Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-        })
-            .then(async (res) => {
-                const ct = (res.headers.get('content-type') || '').toLowerCase()
-                if (!res.ok) {
-                    const txt = await res.text()
-                    throw new Error(`${res.status} ${res.statusText} ${txt}`)
-                }
 
-                // read the raw body text once, then inspect/parse it
-                const raw = await res.text()
-                if (ct.includes('text/html')) {
-                    const snippet = raw.slice(0, 500)
-                    throw new Error(
-                        'Received HTML response instead of JSON. This usually means the request hit the frontend dev server or a wrong URL. Response snippet: ' +
-                            snippet
-                    )
-                }
-
-                try {
-                    return JSON.parse(raw)
-                } catch {
-                    throw new Error(
-                        'Invalid JSON response: ' + raw.slice(0, 1000)
-                    )
-                }
-            })
-            .then((data) => {
-                // Accept either { readings: [...] } or an array
-                const arr = Array.isArray(data) ? data : data?.readings ?? data
+        Promise.all([
+            fetchJson(readingsUrl, {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            }),
+            fetchJson(forecastUrl, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({
+                    machine_id: machineId,
+                    forecast_minutes: 300,
+                }),
+            }),
+        ])
+            .then(([readingsResp, forecastResp]) => {
+                // normalize readings
+                const arr = Array.isArray(readingsResp)
+                    ? readingsResp
+                    : readingsResp?.readings ?? readingsResp
                 const normalized = (Array.isArray(arr) ? arr : [])
                     .slice(0, 300)
                     .map((r: any) => ({
@@ -105,7 +119,34 @@ export default function MachineDetail() {
                             null,
                     }))
 
+                // normalize forecast: forecastResp may be { forecast_data: [...] }
+                const farr = Array.isArray(forecastResp)
+                    ? forecastResp
+                    : forecastResp?.forecast_data ??
+                      forecastResp?.forecast ??
+                      []
+                const normalizedForecast = (Array.isArray(farr) ? farr : [])
+                    .slice(0, 300)
+                    .map((r: any) => ({
+                        timestamp: r.timestamp ?? r.ts ?? r.time,
+                        machine_id: r.machine_id ?? r.machineId ?? machineId,
+                        process_temperature:
+                            r.process_temperature ??
+                            r.processTemperature ??
+                            null,
+                        torque: r.torque ?? null,
+                        air_temperature:
+                            r.air_temperature ?? r.airTemperature ?? null,
+                        tool_wear: r.tool_wear ?? r.toolWear ?? null,
+                        rotational_speed:
+                            r.rotational_speed ??
+                            r.rotationalSpeed ??
+                            r.rpm ??
+                            null,
+                    }))
+
                 setReadings(normalized)
+                setForecast(normalizedForecast)
                 setLoading(false)
             })
             .catch((err: any) => {
@@ -114,11 +155,13 @@ export default function MachineDetail() {
             })
     }, [machineId, API_BASE])
 
-    // prepare chart data: sort by timestamp when possible
+    // prepare combined chart data: observed (db) + forecast series
     const chartData = React.useMemo(() => {
-        if (!readings || readings.length === 0) return []
-        const arr = [...readings]
-        arr.sort((a, b) => {
+        const obs = Array.isArray(readings) ? [...readings] : []
+        const fcd = Array.isArray(forecast) ? [...forecast] : []
+
+        // sort ascending by timestamp (both arrays)
+        const sortByTime = (a: any, b: any) => {
             const ta = a.timestamp
                 ? new Date(a.timestamp).getTime()
                 : Number.NaN
@@ -127,19 +170,38 @@ export default function MachineDetail() {
                 : Number.NaN
             if (Number.isNaN(ta) || Number.isNaN(tb)) return 0
             return ta - tb
-        })
-        return arr.map((r, idx) => ({
+        }
+
+        obs.sort(sortByTime)
+        fcd.sort(sortByTime)
+
+        const obsMapped = obs.map((r: any, idx: number) => ({
             time:
                 r.timestamp && !Number.isNaN(new Date(r.timestamp).getTime())
                     ? new Date(r.timestamp).toLocaleString()
                     : String(idx + 1),
-            process_temperature: r.process_temperature ?? null,
-            torque: r.torque ?? null,
-            air_temperature: r.air_temperature ?? null,
-            tool_wear: r.tool_wear ?? null,
-            rotational_speed: r.rotational_speed ?? null,
+            observed_process_temperature: r.process_temperature ?? null,
+            observed_torque: r.torque ?? null,
+            observed_air_temperature: r.air_temperature ?? null,
+            observed_tool_wear: r.tool_wear ?? null,
+            observed_rotational_speed: r.rotational_speed ?? null,
         }))
-    }, [readings])
+
+        const fcdMapped = fcd.map((r: any, idx: number) => ({
+            time:
+                r.timestamp && !Number.isNaN(new Date(r.timestamp).getTime())
+                    ? new Date(r.timestamp).toLocaleString()
+                    : String(idx + 1),
+            forecast_process_temperature: r.process_temperature ?? null,
+            forecast_torque: r.torque ?? null,
+            forecast_air_temperature: r.air_temperature ?? null,
+            forecast_tool_wear: r.tool_wear ?? null,
+            forecast_rotational_speed: r.rotational_speed ?? null,
+        }))
+
+        // combine: observed first, forecast appended
+        return [...obsMapped, ...fcdMapped]
+    }, [readings, forecast])
 
     return (
         <div className='p-6'>
@@ -162,7 +224,9 @@ export default function MachineDetail() {
             {!loading && !error && chartData.length > 0 && (
                 <div>
                     <p className='mb-2'>
-                        Showing {chartData.length} readings (up to 300).
+                        Showing {readings ? readings.length : 0} observed
+                        readings and {forecast ? forecast.length : 0} forecast
+                        points (up to 300 each).
                     </p>
 
                     <div className='grid gap-6'>
@@ -186,9 +250,18 @@ export default function MachineDetail() {
                                     <Legend />
                                     <Line
                                         type='monotone'
-                                        dataKey='process_temperature'
+                                        dataKey='observed_process_temperature'
+                                        name='Observed'
                                         stroke='#ef4444'
                                         dot={false}
+                                    />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='forecast_process_temperature'
+                                        name='Forecast'
+                                        stroke='#f97316'
+                                        dot={false}
+                                        strokeDasharray='4 4'
                                     />
                                 </LineChart>
                             </ResponsiveContainer>
@@ -212,9 +285,18 @@ export default function MachineDetail() {
                                     <Legend />
                                     <Line
                                         type='monotone'
-                                        dataKey='torque'
+                                        dataKey='observed_torque'
+                                        name='Observed'
                                         stroke='#06b6d4'
                                         dot={false}
+                                    />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='forecast_torque'
+                                        name='Forecast'
+                                        stroke='#0891b2'
+                                        dot={false}
+                                        strokeDasharray='4 4'
                                     />
                                 </LineChart>
                             </ResponsiveContainer>
@@ -240,9 +322,18 @@ export default function MachineDetail() {
                                     <Legend />
                                     <Line
                                         type='monotone'
-                                        dataKey='air_temperature'
+                                        dataKey='observed_air_temperature'
+                                        name='Observed'
                                         stroke='#f59e0b'
                                         dot={false}
+                                    />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='forecast_air_temperature'
+                                        name='Forecast'
+                                        stroke='#d97706'
+                                        dot={false}
+                                        strokeDasharray='4 4'
                                     />
                                 </LineChart>
                             </ResponsiveContainer>
@@ -266,9 +357,18 @@ export default function MachineDetail() {
                                     <Legend />
                                     <Line
                                         type='monotone'
-                                        dataKey='tool_wear'
+                                        dataKey='observed_tool_wear'
+                                        name='Observed'
                                         stroke='#7c3aed'
                                         dot={false}
+                                    />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='forecast_tool_wear'
+                                        name='Forecast'
+                                        stroke='#a78bfa'
+                                        dot={false}
+                                        strokeDasharray='4 4'
                                     />
                                 </LineChart>
                             </ResponsiveContainer>
@@ -294,9 +394,18 @@ export default function MachineDetail() {
                                     <Legend />
                                     <Line
                                         type='monotone'
-                                        dataKey='rotational_speed'
+                                        dataKey='observed_rotational_speed'
+                                        name='Observed'
                                         stroke='#16a34a'
                                         dot={false}
+                                    />
+                                    <Line
+                                        type='monotone'
+                                        dataKey='forecast_rotational_speed'
+                                        name='Forecast'
+                                        stroke='#22c55e'
+                                        dot={false}
+                                        strokeDasharray='4 4'
                                     />
                                 </LineChart>
                             </ResponsiveContainer>
