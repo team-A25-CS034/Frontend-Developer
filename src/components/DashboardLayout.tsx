@@ -5,15 +5,15 @@ import {
   Bell, 
   FileText, 
   User, 
+  Building2,
   Bot,
-  Building2
 } from 'lucide-react';
-import { Button } from './ui/button';
+// keep styling consistent with nav items for Copilot
 import { Avatar, AvatarFallback } from './ui/avatar';
 
 interface DashboardLayoutProps {
   children: ReactNode;
-  onOpenCopilot: () => void;
+  onOpenCopilot?: () => void;
 }
 
 export default function DashboardLayout({ children, onOpenCopilot }: DashboardLayoutProps) {
@@ -21,7 +21,6 @@ export default function DashboardLayout({ children, onOpenCopilot }: DashboardLa
 
   const navigation = [
     { name: 'Fleet', href: '/fleet', icon: LayoutGrid },
-    { name: 'Alerts', href: '/alerts', icon: Bell },
     { name: 'Tickets', href: '/tickets', icon: FileText },
     { name: 'Profile', href: '/profile', icon: User },
   ];
@@ -50,32 +49,35 @@ export default function DashboardLayout({ children, onOpenCopilot }: DashboardLa
           {navigation.map((item) => {
             const Icon = item.icon;
             return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  isActive(item.href)
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span>{item.name}</span>
-              </Link>
+              <div key={item.name}>
+                <Link
+                  to={item.href}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    isActive(item.href)
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{item.name}</span>
+                </Link>
+                {item.name === 'Tickets' && (
+                  // Render Copilot as a nav-style item (same classes as links)
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => onOpenCopilot && onOpenCopilot()}
+                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
+                    >
+                      <Bot className="w-4 h-4" />
+                      <span>Ask Copilot</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
-
-        {/* Copilot Button */}
-        <div className="p-4 border-t border-slate-800">
-          <Button
-            onClick={onOpenCopilot}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-          >
-            <Bot className="w-5 h-5 mr-2" />
-            Ask Copilot
-          </Button>
-        </div>
       </div>
 
       {/* Main Content */}

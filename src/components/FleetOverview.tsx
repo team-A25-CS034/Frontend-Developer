@@ -25,7 +25,6 @@ const machines = [
   {
     id: 'M001',
     name: 'Pump Station A-12',
-    site: 'Plant North',
     status: 'Normal',
     riskScore: 12,
     location: 'Building A, Floor 2',
@@ -34,7 +33,6 @@ const machines = [
   {
     id: 'M002',
     name: 'Compressor B-04',
-    site: 'Plant South',
     status: 'Watch',
     riskScore: 58,
     location: 'Building B, Floor 1',
@@ -43,7 +41,6 @@ const machines = [
   {
     id: 'M003',
     name: 'Motor Drive C-33',
-    site: 'Plant North',
     status: 'Risk',
     riskScore: 87,
     location: 'Building C, Floor 3',
@@ -52,7 +49,6 @@ const machines = [
   {
     id: 'M004',
     name: 'Turbine D-21',
-    site: 'Plant East',
     status: 'Normal',
     riskScore: 24,
     location: 'Building D, Floor 1',
@@ -61,7 +57,6 @@ const machines = [
   {
     id: 'M005',
     name: 'Generator E-15',
-    site: 'Plant South',
     status: 'Watch',
     riskScore: 64,
     location: 'Building E, Floor 2',
@@ -70,7 +65,6 @@ const machines = [
   {
     id: 'M006',
     name: 'Cooling Unit F-08',
-    site: 'Plant East',
     status: 'Normal',
     riskScore: 18,
     location: 'Building F, Floor 1',
@@ -81,8 +75,9 @@ const machines = [
 export default function FleetOverview() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [siteFilter, setSiteFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -118,11 +113,63 @@ export default function FleetOverview() {
   const filteredMachines = machines.filter((machine) => {
     const matchesSearch = machine.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           machine.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSite = siteFilter === 'all' || machine.site === siteFilter;
     const matchesStatus = statusFilter === 'all' || machine.status === statusFilter;
-    
-    return matchesSearch && matchesSite && matchesStatus;
+
+    return matchesSearch && matchesStatus;
   });
+
+  const statusOrder: Record<string, number> = {
+    Normal: 0,
+    Watch: 1,
+    Risk: 2,
+  };
+
+  const sortedMachines = [...filteredMachines].sort((a, b) => {
+    if (!sortBy) return 0;
+
+    let va: any = (a as any)[sortBy];
+    let vb: any = (b as any)[sortBy];
+
+    // special handling for certain columns
+    if (sortBy === 'riskScore') {
+      va = Number(va);
+      vb = Number(vb);
+    }
+
+    if (sortBy === 'lastMaintenance') {
+      va = new Date(va).getTime();
+      vb = new Date(vb).getTime();
+    }
+
+    if (sortBy === 'status') {
+      va = statusOrder[va] ?? 99;
+      vb = statusOrder[vb] ?? 99;
+    }
+
+    // string compare (case-insensitive)
+    if (typeof va === 'string' && typeof vb === 'string') {
+      const res = va.localeCompare(vb, undefined, { sensitivity: 'base' });
+      return sortDir === 'asc' ? res : -res;
+    }
+
+    // numeric compare
+    if (typeof va === 'number' && typeof vb === 'number') {
+      return sortDir === 'asc' ? va - vb : vb - va;
+    }
+
+    // fallback
+    const res = String(va).localeCompare(String(vb));
+    return sortDir === 'asc' ? res : -res;
+  });
+
+  const toggleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortDir('asc');
+    }
+  };
 
   const stats = {
     total: machines.length,
@@ -166,18 +213,7 @@ export default function FleetOverview() {
             />
           </div>
           
-          <Select value={siteFilter} onValueChange={setSiteFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by site" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sites</SelectItem>
-              <SelectItem value="Plant North">Plant North</SelectItem>
-              <SelectItem value="Plant South">Plant South</SelectItem>
-              <SelectItem value="Plant East">Plant East</SelectItem>
-            </SelectContent>
-          </Select>
-
+          
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Filter by status" />
@@ -197,21 +233,64 @@ export default function FleetOverview() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Machine ID</TableHead>
-              <TableHead>Machine Name</TableHead>
-              <TableHead>Site</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Risk Score</TableHead>
-              <TableHead>Last Maintenance</TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('id')}
+                  className="flex items-center gap-2"
+                >
+                  <span>Machine ID</span>
+                  {sortBy === 'id' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('name')}
+                  className="flex items-center gap-2"
+                >
+                  <span>Machine Name</span>
+                  {sortBy === 'name' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('status')}
+                  className="flex items-center gap-2"
+                >
+                  <span>Status</span>
+                  {sortBy === 'status' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('riskScore')}
+                  className="flex items-center gap-2"
+                >
+                  <span>Risk Score</span>
+                  {sortBy === 'riskScore' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('lastMaintenance')}
+                  className="flex items-center gap-2"
+                >
+                  <span>Last Maintenance</span>
+                  {sortBy === 'lastMaintenance' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                </button>
+              </TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredMachines.map((machine) => (
+            {sortedMachines.map((machine) => (
               <TableRow key={machine.id}>
                 <TableCell>{machine.id}</TableCell>
                 <TableCell>{machine.name}</TableCell>
-                <TableCell>{machine.site}</TableCell>
                 <TableCell>
                   <Badge 
                     variant="outline" 
