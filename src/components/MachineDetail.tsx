@@ -6,7 +6,7 @@ import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar, Legend } from 'recharts';
-import CopilotModal from './CopilotModal';
+import { useCopilot } from '../contexts/CopilotContext';
 
 // Mock sensor data (renamed to reflect new metrics)
 // Air temperature values converted to Kelvin (approx.) from previous mock Fahrenheit
@@ -144,7 +144,7 @@ const machineDetails: Record<string, any> = {
 export default function MachineDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const { openCopilot } = useCopilot();
 
   const machine = machineDetails[id || 'M001'] || machineDetails.M001;
 
@@ -516,7 +516,7 @@ export default function MachineDetail() {
         <Button 
           size="lg"
           className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg"
-          onClick={() => setCopilotOpen(true)}
+          onClick={() => openCopilot()}
         >
           <Bot className="w-5 h-5 mr-2" />
           Ask Copilot
@@ -532,8 +532,7 @@ export default function MachineDetail() {
           Create Ticket
         </Button>
       </div>
-      {/* Copilot modal */}
-      <CopilotModal isOpen={copilotOpen} onClose={() => setCopilotOpen(false)} />
+      {/* Copilot modal is provided at app-level via CopilotProvider */}
     </div>
   );
 }
