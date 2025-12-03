@@ -13,7 +13,7 @@ FROM nginx:alpine
 
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/build /usr/share/nginx/html
 
 ENV PORT=8080
 
