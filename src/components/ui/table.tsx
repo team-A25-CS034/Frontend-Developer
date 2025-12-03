@@ -78,6 +78,30 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   );
 }
 
+function SortButton({
+  active = false,
+  direction = 'asc',
+  onClick,
+}: {
+  active?: boolean;
+  direction?: 'asc' | 'desc';
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'inline-flex items-center justify-center w-6 h-6 rounded text-slate-500 hover:bg-slate-100',
+        active ? 'text-slate-900 font-semibold' : ''
+      )}
+    >
+      {direction === 'asc' ? <span>▲</span> : <span>▼</span>}
+    </button>
+  );
+}
+
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
@@ -113,4 +137,5 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  SortButton,
 };

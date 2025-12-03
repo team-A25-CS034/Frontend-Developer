@@ -12,6 +12,74 @@ import {
   TableRow,
 } from './ui/table';
 
+function TableWithSort({ data }: { data: any[] }) {
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const toggleSort = (col: string) => {
+    if (sortBy === col) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else {
+      setSortBy(col);
+      setSortDir('asc');
+    }
+  };
+
+  const sorted = [...data].sort((a, b) => {
+    if (!sortBy) return 0;
+    const va = a[sortBy];
+    const vb = b[sortBy];
+    if (typeof va === 'number' && typeof vb === 'number') return sortDir === 'asc' ? va - vb : vb - va;
+    return sortDir === 'asc'
+      ? String(va).localeCompare(String(vb), undefined, { sensitivity: 'base' })
+      : String(vb).localeCompare(String(va), undefined, { sensitivity: 'base' });
+  });
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>
+            <button type="button" className="flex items-center gap-2" onClick={() => toggleSort('machine')}>
+              <span>Machine</span>
+              {sortBy === 'machine' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+            </button>
+          </TableHead>
+          <TableHead>
+            <button type="button" className="flex items-center gap-2" onClick={() => toggleSort('risk')}>
+              <span>Risk</span>
+              {sortBy === 'risk' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+            </button>
+          </TableHead>
+          <TableHead>
+            <button type="button" className="flex items-center gap-2" onClick={() => toggleSort('issue')}>
+              <span>Issue</span>
+              {sortBy === 'issue' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+            </button>
+          </TableHead>
+          <TableHead>
+            <button type="button" className="flex items-center gap-2" onClick={() => toggleSort('eta')}>
+              <span>ETA</span>
+              {sortBy === 'eta' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+            </button>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {sorted.map((row, idx) => (
+          <TableRow key={idx}>
+            <TableCell>{row.machine}</TableCell>
+            <TableCell>
+              <span className={row.risk >= 70 ? 'text-red-600' : 'text-yellow-600'}>{row.risk}</span>
+            </TableCell>
+            <TableCell>{row.issue}</TableCell>
+            <TableCell>{row.eta}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 interface CopilotModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -176,30 +244,7 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
                   
                   {message.type === 'table' && message.tableData && (
                     <div className="mt-4 bg-white rounded border border-slate-200 overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-slate-900">Machine</TableHead>
-                            <TableHead className="text-slate-900">Risk</TableHead>
-                            <TableHead className="text-slate-900">Issue</TableHead>
-                            <TableHead className="text-slate-900">ETA</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {message.tableData.map((row, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell>{row.machine}</TableCell>
-                              <TableCell>
-                                <span className={row.risk >= 70 ? 'text-red-600' : 'text-yellow-600'}>
-                                  {row.risk}
-                                </span>
-                              </TableCell>
-                              <TableCell>{row.issue}</TableCell>
-                              <TableCell>{row.eta}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                      <TableWithSort data={message.tableData} />
                     </div>
                   )}
                 </div>

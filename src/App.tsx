@@ -4,7 +4,6 @@ import LoginPage from './components/LoginPage';
 import DashboardLayout from './components/DashboardLayout';
 import FleetOverview from './components/FleetOverview';
 import MachineDetail from './components/MachineDetail';
-import AlertSettings from './components/AlertSettings';
 import TicketSimulation from './components/TicketSimulation';
 import ProfileSettings from './components/ProfileSettings';
 import CopilotModal from './components/CopilotModal';
@@ -39,7 +38,7 @@ export default function App() {
                   <Routes>
                     <Route path="/fleet" element={<FleetOverview />} />
                     <Route path="/machine/:id" element={<MachineDetail />} />
-                    <Route path="/alerts" element={<AlertSettings />} />
+                    {/* Alerts feature removed */}
                     <Route path="/tickets" element={<TicketSimulation />} />
                     <Route path="/profile" element={<ProfileSettings />} />
                     <Route path="/" element={<Navigate to="/fleet" replace />} />

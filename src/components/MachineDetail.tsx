@@ -1,50 +1,67 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, AlertTriangle, Bot, Bell, FileText, TrendingUp, Activity, Clock, Wrench, Zap, Gauge, ThermometerSun, Radio } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, MapPin, Bot, FileText, Activity, Clock, Wrench, Zap, Gauge, ThermometerSun, Radio } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar, Legend } from 'recharts';
+import CopilotModal from './CopilotModal';
 
-// Mock sensor data
-const temperatureData = [
-  { time: '00:00', value: 68 },
-  { time: '04:00', value: 72 },
-  { time: '08:00', value: 85 },
-  { time: '12:00', value: 92 },
-  { time: '16:00', value: 88 },
-  { time: '20:00', value: 75 },
-  { time: '24:00', value: 70 },
+// Mock sensor data (renamed to reflect new metrics)
+// Air temperature values converted to Kelvin (approx.) from previous mock Fahrenheit
+const airTempData = [
+  { time: '00:00', value: 293 },
+  { time: '04:00', value: 295 },
+  { time: '08:00', value: 303 },
+  { time: '12:00', value: 306 },
+  { time: '16:00', value: 304 },
+  { time: '20:00', value: 297 },
+  { time: '24:00', value: 294 },
 ];
 
-const vibrationData = [
-  { time: '00:00', value: 2.1 },
-  { time: '04:00', value: 2.3 },
-  { time: '08:00', value: 3.8 },
-  { time: '12:00', value: 4.2 },
-  { time: '16:00', value: 3.9 },
-  { time: '20:00', value: 2.8 },
-  { time: '24:00', value: 2.2 },
+// Process temperature (Kelvin) - derived/mock values
+const processTempData = [
+  { time: '00:00', value: 318 },
+  { time: '04:00', value: 321 },
+  { time: '08:00', value: 335 },
+  { time: '12:00', value: 341 },
+  { time: '16:00', value: 338 },
+  { time: '20:00', value: 325 },
+  { time: '24:00', value: 320 },
 ];
 
-const currentData = [
-  { time: '00:00', value: 45 },
-  { time: '04:00', value: 48 },
-  { time: '08:00', value: 62 },
-  { time: '12:00', value: 68 },
-  { time: '16:00', value: 65 },
-  { time: '20:00', value: 52 },
-  { time: '24:00', value: 47 },
+// Rotational speed (RPM) - mock values
+const rotationalSpeedData = [
+  { time: '00:00', value: 1000 },
+  { time: '04:00', value: 1200 },
+  { time: '08:00', value: 1500 },
+  { time: '12:00', value: 1600 },
+  { time: '16:00', value: 1400 },
+  { time: '20:00', value: 1100 },
+  { time: '24:00', value: 1000 },
 ];
 
-const pressureData = [
-  { time: '00:00', value: 85 },
-  { time: '04:00', value: 87 },
-  { time: '08:00', value: 92 },
-  { time: '12:00', value: 95 },
-  { time: '16:00', value: 93 },
-  { time: '20:00', value: 89 },
-  { time: '24:00', value: 86 },
+// Torque (Nm) - mock values
+const torqueData = [
+  { time: '00:00', value: 10 },
+  { time: '04:00', value: 12 },
+  { time: '08:00', value: 15 },
+  { time: '12:00', value: 13 },
+  { time: '16:00', value: 14 },
+  { time: '20:00', value: 11 },
+  { time: '24:00', value: 9 },
+];
+
+// Tool wear (minutes) - mock values
+const toolWearData = [
+  { time: '00:00', value: 30 },
+  { time: '04:00', value: 45 },
+  { time: '08:00', value: 60 },
+  { time: '12:00', value: 75 },
+  { time: '16:00', value: 90 },
+  { time: '20:00', value: 105 },
+  { time: '24:00', value: 120 },
 ];
 
 const maintenanceHistory = [
@@ -58,7 +75,7 @@ const maintenanceHistory = [
 
 // Mock machine details
 const machineDetails: Record<string, any> = {
-  M001: {
+    M001: {
     name: 'Pump Station A-12',
     site: 'Plant North',
     status: 'Normal',
@@ -73,16 +90,14 @@ const machineDetails: Record<string, any> = {
     lastMaintenance: '2025-10-15',
     nextMaintenance: '2025-12-15',
     powerConsumption: 45.2,
-    avgTemperature: 70,
-    avgVibration: 2.2,
-    avgCurrent: 47,
-    topFeatures: [
-      { name: 'Temperature', value: 70, unit: '°F', impact: 'Low' },
-      { name: 'Vibration', value: 2.2, unit: 'mm/s', impact: 'Low' },
-      { name: 'Current', value: 47, unit: 'A', impact: 'Low' },
-    ],
+    // New metric fields
+    airTempK: 294,
+    processTempK: 318,
+    rotationalSpeed: 1500,
+    torque: 10,
+    toolWearMin: 120,
   },
-  M002: {
+    M002: {
     name: 'Compressor B-04',
     site: 'Plant South',
     status: 'Watch',
@@ -97,16 +112,13 @@ const machineDetails: Record<string, any> = {
     lastMaintenance: '2025-09-20',
     nextMaintenance: '2025-11-20',
     powerConsumption: 68.5,
-    avgTemperature: 92,
-    avgVibration: 4.2,
-    avgCurrent: 68,
-    topFeatures: [
-      { name: 'Temperature', value: 92, unit: '°F', impact: 'Medium' },
-      { name: 'Vibration', value: 4.2, unit: 'mm/s', impact: 'High' },
-      { name: 'Current', value: 68, unit: 'A', impact: 'Medium' },
-    ],
+    airTempK: 306,
+    processTempK: 341,
+    rotationalSpeed: 1600,
+    torque: 13,
+    toolWearMin: 90,
   },
-  M003: {
+    M003: {
     name: 'Motor Drive C-33',
     site: 'Plant North',
     status: 'Risk',
@@ -121,20 +133,18 @@ const machineDetails: Record<string, any> = {
     lastMaintenance: '2025-08-10',
     nextMaintenance: '2025-11-10',
     powerConsumption: 82.7,
-    avgTemperature: 105,
-    avgVibration: 6.8,
-    avgCurrent: 82,
-    topFeatures: [
-      { name: 'Temperature', value: 105, unit: '°F', impact: 'High' },
-      { name: 'Vibration', value: 6.8, unit: 'mm/s', impact: 'High' },
-      { name: 'Current', value: 82, unit: 'A', impact: 'High' },
-    ],
+    airTempK: 378,
+    processTempK: 374,
+    rotationalSpeed: 1400,
+    torque: 15,
+    toolWearMin: 150,
   },
 };
 
 export default function MachineDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   const machine = machineDetails[id || 'M001'] || machineDetails.M001;
 
@@ -224,11 +234,24 @@ export default function MachineDetail() {
             </div>
           </div>
 
-          <div className="text-right bg-white/10 backdrop-blur rounded-lg p-4">
-            <p className="text-slate-300 mb-2">Risk Score</p>
-            <p className={`text-4xl ${getRiskColor(machine.riskScore)}`}>
-              {machine.riskScore}
-            </p>
+          <div className="flex items-center gap-6">
+            <div className="bg-white/10 backdrop-blur rounded-lg p-4 flex items-center gap-3 shadow-sm">
+              <div className="relative w-28 h-16">
+                <svg viewBox="0 0 200 120" className="w-full h-full">
+                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e2e8f0" strokeWidth="16" strokeLinecap="round" />
+                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke={healthData[0].fill} strokeWidth="16" strokeLinecap="round" strokeDasharray={`${(machine.healthScore / 100) * 251.2} 251.2`} />
+                  <text x="100" y="86" textAnchor="middle" className="text-base font-bold" fill={healthData[0].fill}>{machine.healthScore}%</text>
+                </svg>
+              </div>
+              <div className="ml-2 text-left">
+                <p className="text-slate-300 text-sm">Overall Health</p>
+              </div>
+            </div>
+
+            <div className="bg-white/18 backdrop-blur rounded-lg p-4 flex flex-col items-end min-w-[88px] shadow-sm">
+              <p className="text-slate-300 mb-1 text-sm">Risk Score</p>
+              <p className={`text-3xl ${getRiskColor(machine.riskScore)}`}>{machine.riskScore}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -288,224 +311,184 @@ export default function MachineDetail() {
         </Card>
       </div>
 
-      {/* Health Visualization and Contributing Features */}
-      <div className="grid grid-cols-4 gap-6 mb-6">
-        {/* Health Score Radial */}
-        <Card className="bg-white">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-slate-700">Overall Health</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center">
-            <div className="relative w-40 h-24 mb-4">
-              <svg viewBox="0 0 200 120" className="w-full h-full">
-                {/* Background arc */}
-                <path
-                  d="M 20 100 A 80 80 0 0 1 180 100"
-                  fill="none"
-                  stroke="#e2e8f0"
-                  strokeWidth="20"
-                  strokeLinecap="round"
-                />
-                {/* Progress arc */}
-                <path
-                  d="M 20 100 A 80 80 0 0 1 180 100"
-                  fill="none"
-                  stroke={healthData[0].fill}
-                  strokeWidth="20"
-                  strokeLinecap="round"
-                  strokeDasharray={`${(machine.healthScore / 100) * 251.2} 251.2`}
-                />
-                {/* Center text */}
-                <text
-                  x="100"
-                  y="90"
-                  textAnchor="middle"
-                  className="text-3xl font-bold"
-                  fill={healthData[0].fill}
-                >
-                  {machine.healthScore}%
-                </text>
-              </svg>
-            </div>
-            <p className="text-slate-600 text-center">
-              Next maintenance: {machine.nextMaintenance}
-            </p>
-          </CardContent>
-        </Card>
+      {/* Overall Health moved into header beside Risk Score */}
+      
 
-        {/* Temperature */}
-        <Card className="bg-white">
-          <CardContent className="pt-6 pb-6 flex flex-col h-full">
-            <div className="flex items-center gap-2 mb-6">
-              <ThermometerSun className="w-5 h-5 text-orange-500" />
-              <span className="text-slate-700">Temperature</span>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <p className="text-slate-900 mb-3">
-                {machine.topFeatures[0].value} {machine.topFeatures[0].unit}
-              </p>
-              <Badge 
-                variant="outline" 
-                className={`w-fit ${getImpactColor(machine.topFeatures[0].impact)}`}
-              >
-                {machine.topFeatures[0].impact} Impact
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Five metric cards (single row) placed right after Overall Health */}
+      <div className="grid grid-cols-5 gap-4 mb-6 items-stretch">
+        <div className="col-span-1">
+          <Card className="h-32 md:h-36">
+            <CardContent className="pt-6 pb-6 flex flex-col justify-between">
+              <div className="flex items-center gap-2 mb-2">
+                <ThermometerSun className="w-5 h-5 text-orange-500" />
+                <span className="text-slate-700">Air Temperature [K]</span>
+              </div>
+              <p className="text-slate-900">{machine.airTempK} K</p>
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Vibration */}
-        <Card className="bg-white">
-          <CardContent className="pt-6 pb-6 flex flex-col h-full">
-            <div className="flex items-center gap-2 mb-6">
-              <Radio className="w-5 h-5 text-purple-500" />
-              <span className="text-slate-700">Vibration</span>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <p className="text-slate-900 mb-3">
-                {machine.topFeatures[1].value} {machine.topFeatures[1].unit}
-              </p>
-              <Badge 
-                variant="outline" 
-                className={`w-fit ${getImpactColor(machine.topFeatures[1].impact)}`}
-              >
-                {machine.topFeatures[1].impact} Impact
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="col-span-1">
+          <Card className="h-32 md:h-36">
+            <CardContent className="pt-6 pb-6 flex flex-col justify-between">
+              <div className="flex items-center gap-2 mb-2">
+                <ThermometerSun className="w-5 h-5 text-red-500" />
+                <span className="text-slate-700">Process Temperature [K]</span>
+              </div>
+              <p className="text-slate-900">{machine.processTempK} K</p>
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Current */}
-        <Card className="bg-white">
-          <CardContent className="pt-6 pb-6 flex flex-col h-full">
-            <div className="flex items-center gap-2 mb-6">
-              <Zap className="w-5 h-5 text-blue-500" />
-              <span className="text-slate-700">Current</span>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <p className="text-slate-900 mb-3">
-                {machine.topFeatures[2].value} {machine.topFeatures[2].unit}
-              </p>
-              <Badge 
-                variant="outline" 
-                className={`w-fit ${getImpactColor(machine.topFeatures[2].impact)}`}
-              >
-                {machine.topFeatures[2].impact} Impact
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="col-span-1">
+          <Card className="h-32 md:h-36">
+            <CardContent className="pt-6 pb-6 flex flex-col justify-between">
+              <div className="flex items-center gap-2 mb-2">
+                <Radio className="w-5 h-5 text-purple-500" />
+                <span className="text-slate-700">Rotational Speed (RPM)</span>
+              </div>
+              <p className="text-slate-900">{machine.rotationalSpeed} RPM</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="col-span-1">
+          <Card className="h-32 md:h-36">
+            <CardContent className="pt-6 pb-6 flex flex-col justify-between">
+              <div className="flex items-center gap-2 mb-2">
+                <Gauge className="w-5 h-5 text-green-500" />
+                <span className="text-slate-700">Torque [Nm]</span>
+              </div>
+              <p className="text-slate-900">{machine.torque} Nm</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="col-span-1">
+          <Card className="h-32 md:h-36">
+            <CardContent className="pt-6 pb-6 flex flex-col justify-between">
+              <div className="flex items-center gap-2 mb-2">
+                <Wrench className="w-5 h-5 text-orange-600" />
+                <span className="text-slate-700">ToolWear [min]</span>
+              </div>
+              <p className="text-slate-900">{machine.toolWearMin} min</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Sensor Graphs */}
       <div className="mb-6">
         <h2 className="text-slate-900 mb-4">Sensor Data (Last 24 Hours)</h2>
         <div className="grid grid-cols-2 gap-6">
-          {/* Temperature Chart */}
+          {/* Air Temperature Chart */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ThermometerSun className="w-5 h-5 text-orange-500" />
-                Temperature
+                Air Temperature [K]
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={temperatureData}>
+                <AreaChart data={airTempData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="time" />
                   <YAxis />
                   <Tooltip />
-                  <Area 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="#f97316" 
-                    fill="#fed7aa" 
-                  />
+                  <Area type="monotone" dataKey="value" stroke="#f97316" fill="#fed7aa" />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Vibration Chart */}
+          {/* Process Temperature Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ThermometerSun className="w-5 h-5 text-red-500" />
+                Process Temperature [K]
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={processTempData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="time" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="value" stroke="#ef4444" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Rotational Speed Chart */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Radio className="w-5 h-5 text-purple-500" />
-                Vibration
+                Rotational Speed (RPM)
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={vibrationData}>
+                <AreaChart data={rotationalSpeedData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="time" />
                   <YAxis />
                   <Tooltip />
-                  <Line 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="#a855f7" 
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Current Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-blue-500" />
-                Current
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={currentData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="time" />
-                  <YAxis />
-                  <Tooltip />
-                  <Area 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="#3b82f6" 
-                    fill="#bfdbfe" 
-                  />
+                  <Area type="monotone" dataKey="value" stroke="#a855f7" fill="#f3e8ff" />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Pressure Chart */}
+          {/* Torque Chart */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Gauge className="w-5 h-5 text-green-500" />
-                Pressure
+                Torque [Nm]
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={pressureData}>
+                <LineChart data={torqueData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="time" />
                   <YAxis />
                   <Tooltip />
-                  <Line 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="#22c55e" 
-                    strokeWidth={2}
-                  />
+                  <Line type="monotone" dataKey="value" stroke="#16a34a" strokeWidth={2} />
                 </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* ToolWear Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-orange-600" />
+                ToolWear [min]
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={toolWearData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="time" />
+                  <YAxis />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="value" stroke="#f59e0b" fill="#fff4e6" />
+                </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      
 
       {/* Maintenance History */}
       <Card className="mb-6">
@@ -533,19 +516,12 @@ export default function MachineDetail() {
         <Button 
           size="lg"
           className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg"
+          onClick={() => setCopilotOpen(true)}
         >
           <Bot className="w-5 h-5 mr-2" />
           Ask Copilot
         </Button>
-        <Button 
-          size="lg"
-          variant="outline" 
-          className="bg-white shadow-lg"
-          onClick={() => navigate('/alerts')}
-        >
-          <Bell className="w-5 h-5 mr-2" />
-          Set Alert
-        </Button>
+        
         <Button 
           size="lg"
           variant="outline" 
@@ -556,6 +532,8 @@ export default function MachineDetail() {
           Create Ticket
         </Button>
       </div>
+      {/* Copilot modal */}
+      <CopilotModal isOpen={copilotOpen} onClose={() => setCopilotOpen(false)} />
     </div>
   );
 }

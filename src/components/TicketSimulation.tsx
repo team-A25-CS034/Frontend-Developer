@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, FileText, Calendar, AlertCircle } from 'lucide-react';
+import { Plus, FileText, Calendar } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -228,6 +228,7 @@ export default function TicketSimulation() {
           </Button>
         </CardContent>
       </Card>
+
 
       {/* Tickets Table */}
       <Card>
