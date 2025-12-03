@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
+import { Search, AlignLeft, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -130,6 +130,18 @@ export default function FleetOverview() {
     let va: any = (a as any)[sortBy];
     let vb: any = (b as any)[sortBy];
 
+    // special handling for machine ID: sort by numeric suffix when present (M001 -> 1)
+    if (sortBy === 'id') {
+      const numA = String(va).match(/(\d+)$/)?.[1];
+      const numB = String(vb).match(/(\d+)$/)?.[1];
+      if (numA && numB) {
+        const nA = Number(numA);
+        const nB = Number(numB);
+        return sortDir === 'asc' ? nA - nB : nB - nA;
+      }
+      // fallback to string compare below if numeric suffix not present
+    }
+
     // special handling for certain columns
     if (sortBy === 'riskScore') {
       va = Number(va);
@@ -163,8 +175,13 @@ export default function FleetOverview() {
   });
 
   const toggleSort = (column: string) => {
+    // Cycle: asc -> desc -> none -> asc
     if (sortBy === column) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+      if (sortDir === 'asc') setSortDir('desc');
+      else if (sortDir === 'desc') {
+        setSortBy(null);
+        setSortDir('asc');
+      }
     } else {
       setSortBy(column);
       setSortDir('asc');
@@ -234,54 +251,84 @@ export default function FleetOverview() {
           <TableHeader>
             <TableRow>
               <TableHead>
-                <button
-                  type="button"
-                  onClick={() => toggleSort('id')}
-                  className="flex items-center gap-2"
-                >
-                  <span>Machine ID</span>
-                  {sortBy === 'id' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
-                </button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span>Machine ID</span>
+                    {sortBy === 'id' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('id')}
+                    aria-label="Sort by Machine ID"
+                    className="p-1 hover:bg-slate-100 rounded"
+                  >
+                    <AlignLeft className="w-4 h-4 text-slate-500" />
+                  </button>
+                </div>
               </TableHead>
               <TableHead>
-                <button
-                  type="button"
-                  onClick={() => toggleSort('name')}
-                  className="flex items-center gap-2"
-                >
-                  <span>Machine Name</span>
-                  {sortBy === 'name' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
-                </button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span>Machine Name</span>
+                    {sortBy === 'name' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('name')}
+                    aria-label="Sort by Machine Name"
+                    className="p-1 hover:bg-slate-100 rounded"
+                  >
+                    <AlignLeft className="w-4 h-4 text-slate-500" />
+                  </button>
+                </div>
               </TableHead>
               <TableHead>
-                <button
-                  type="button"
-                  onClick={() => toggleSort('status')}
-                  className="flex items-center gap-2"
-                >
-                  <span>Status</span>
-                  {sortBy === 'status' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
-                </button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span>Status</span>
+                    {sortBy === 'status' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('status')}
+                    aria-label="Sort by Status"
+                    className="p-1 hover:bg-slate-100 rounded"
+                  >
+                    <AlignLeft className="w-4 h-4 text-slate-500" />
+                  </button>
+                </div>
               </TableHead>
               <TableHead>
-                <button
-                  type="button"
-                  onClick={() => toggleSort('riskScore')}
-                  className="flex items-center gap-2"
-                >
-                  <span>Risk Score</span>
-                  {sortBy === 'riskScore' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
-                </button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span>Risk Score</span>
+                    {sortBy === 'riskScore' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('riskScore')}
+                    aria-label="Sort by Risk Score"
+                    className="p-1 hover:bg-slate-100 rounded"
+                  >
+                    <AlignLeft className="w-4 h-4 text-slate-500" />
+                  </button>
+                </div>
               </TableHead>
               <TableHead>
-                <button
-                  type="button"
-                  onClick={() => toggleSort('lastMaintenance')}
-                  className="flex items-center gap-2"
-                >
-                  <span>Last Maintenance</span>
-                  {sortBy === 'lastMaintenance' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
-                </button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span>Last Maintenance</span>
+                    {sortBy === 'lastMaintenance' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('lastMaintenance')}
+                    aria-label="Sort by Last Maintenance"
+                    className="p-1 hover:bg-slate-100 rounded"
+                  >
+                    <AlignLeft className="w-4 h-4 text-slate-500" />
+                  </button>
+                </div>
               </TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>

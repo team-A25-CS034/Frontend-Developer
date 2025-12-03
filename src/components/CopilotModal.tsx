@@ -1,8 +1,9 @@
-import { useState } from 'react';
+// copilotmodal.tsx
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Send, Mic, Download, Trash2, Bot } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { ScrollArea } from './ui/scroll-area';
+// removed ScrollArea import since we use native scrolling container
 import {
   Table,
   TableBody,
@@ -62,6 +63,18 @@ function TableWithSort({ data }: { data: any[] }) {
               {sortBy === 'eta' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
             </button>
           </TableHead>
+          <TableHead>
+            <button type="button" className="flex items-center gap-2" onClick={() => toggleSort('location')}>
+              <span>Location</span>
+              {sortBy === 'location' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+            </button>
+          </TableHead>
+          <TableHead>
+            <button type="button" className="flex items-center gap-2" onClick={() => toggleSort('confidence')}>
+              <span>Confidence</span>
+              {sortBy === 'confidence' && (sortDir === 'asc' ? <span>▲</span> : <span>▼</span>)}
+            </button>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -73,6 +86,8 @@ function TableWithSort({ data }: { data: any[] }) {
             </TableCell>
             <TableCell>{row.issue}</TableCell>
             <TableCell>{row.eta}</TableCell>
+            <TableCell>{row.location}</TableCell>
+            <TableCell>{row.confidence != null ? `${row.confidence}%` : '-'}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -101,8 +116,38 @@ const examplePrompts = [
 ];
 
 const mockTableResponse = [
-  { machine: 'Motor Drive C-33', risk: 87, issue: 'High vibration', eta: '3-5 days' },
-  { machine: 'Compressor B-04', risk: 58, issue: 'Temperature rising', eta: '7-10 days' },
+  {
+    machine: 'Motor Drive C-33',
+    risk: 87,
+    issue: 'High vibration',
+    eta: '3-5 days',
+    location: 'Building C, Floor 3',
+    confidence: 73,
+  },
+  {
+    machine: 'Compressor B-04',
+    risk: 58,
+    issue: 'Temperature rising',
+    eta: '7-10 days',
+    location: 'Building B, Floor 1',
+    confidence: 61,
+  },
+  {
+    machine: 'Turbine D-21',
+    risk: 24,
+    issue: 'Oil level low',
+    eta: '14-21 days',
+    location: 'Building D, Floor 1',
+    confidence: 45,
+  },
+  {
+    machine: 'Generator E-15',
+    risk: 64,
+    issue: 'Bearing wear',
+    eta: '7-14 days',
+    location: 'Building E, Floor 2',
+    confidence: 59,
+  },
 ];
 
 export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
@@ -110,10 +155,29 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your Predictive Maintenance Copilot. I can help you analyze machine conditions, predict failures, and provide maintenance recommendations. How can I assist you today?',
+      content:
+        "Hello! I'm your Predictive Maintenance Copilot. I can help you analyze machine conditions, predict failures, and provide maintenance recommendations. How can I assist you today?",
     },
   ]);
   const [inputValue, setInputValue] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // scroll to bottom when messages update
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [messages]);
+
+  // lock background scroll while modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
 
   const handleSend = () => {
     if (!inputValue.trim()) return;
@@ -128,12 +192,13 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
 
     // Simulate AI response
     setTimeout(() => {
-      const isTableQuery = inputValue.toLowerCase().includes('which') || 
-                          inputValue.toLowerCase().includes('show') ||
-                          inputValue.toLowerCase().includes('list');
-      
+      const isTableQuery =
+        inputValue.toLowerCase().includes('which') ||
+        inputValue.toLowerCase().includes('show') ||
+        inputValue.toLowerCase().includes('list');
+
       let assistantMessage: Message;
-      
+
       if (isTableQuery) {
         assistantMessage = {
           id: (Date.now() + 1).toString(),
@@ -146,10 +211,11 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
         assistantMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: 'Based on the analysis of your fleet, I recommend prioritizing Motor Drive C-33 for maintenance. The vibration levels have increased 40% over the past week, and the predictive model indicates a 73% probability of failure within the next 7 days. I suggest scheduling an inspection to check the bearing alignment and lubrication system.',
+          content:
+            'Based on the analysis of your fleet, I recommend prioritizing Motor Drive C-33 for maintenance. The vibration levels have increased 40% over the past week, and the predictive model indicates a 73% probability of failure within the next 7 days. I suggest scheduling an inspection to check the bearing alignment and lubrication system.',
         };
       }
-      
+
       setMessages((prev) => [...prev, assistantMessage]);
     }, 1000);
 
@@ -161,15 +227,14 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
       {
         id: '1',
         role: 'assistant',
-        content: 'Hello! I\'m your Predictive Maintenance Copilot. I can help you analyze machine conditions, predict failures, and provide maintenance recommendations. How can I assist you today?',
+        content:
+          "Hello! I'm your Predictive Maintenance Copilot. I can help you analyze machine conditions, predict failures, and provide maintenance recommendations. How can I assist you today?",
       },
     ]);
   };
 
   const handleExportChat = () => {
-    const chatText = messages
-      .map((m) => `${m.role === 'user' ? 'You' : 'Copilot'}: ${m.content}`)
-      .join('\n\n');
+    const chatText = messages.map((m) => `${m.role === 'user' ? 'You' : 'Copilot'}: ${m.content}`).join('\n\n');
     const blob = new Blob([chatText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -183,7 +248,7 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-3xl h-[80vh] flex flex-col">
+      <div className="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -195,63 +260,43 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
               <p className="text-slate-600">Predictive Maintenance Assistant</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleExportChat}
-              title="Export chat"
-            >
+            <Button variant="ghost" size="sm" onClick={handleExportChat} title="Export chat">
               <Download className="w-4 h-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearChat}
-              title="Clear chat"
-            >
+            <Button variant="ghost" size="sm" onClick={handleClearChat} title="Clear chat">
               <Trash2 className="w-4 h-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-            >
+            <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
-        {/* Messages */}
-        <ScrollArea className="flex-1 p-6">
-          <div className="space-y-4">
+        {/* Messages: native scroll container inside modal */}
+        <div className="flex-1 min-h-0 p-6 overflow-auto overscroll-contain">
+          <div className="flex flex-col gap-4 min-h-0">
             {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                }`}
-              >
+              <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[80%] rounded-lg p-4 ${
-                    message.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-900'
+                    message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
                   }`}
                 >
-                  <p>{message.content}</p>
-                  
+                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
+
                   {message.type === 'table' && message.tableData && (
-                    <div className="mt-4 bg-white rounded border border-slate-200 overflow-hidden">
+                    <div className="mt-4 bg-white rounded border border-slate-200 overflow-auto">
                       <TableWithSort data={message.tableData} />
                     </div>
                   )}
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef as any} />
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Example Prompts */}
         {messages.length === 1 && (
@@ -271,27 +316,20 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
           </div>
         )}
 
-        {/* Input */}
+        {/* Input (stays pinned at bottom because parent is flex flex-col) */}
         <div className="p-6 border-t border-slate-200">
           <div className="flex gap-2">
             <Input
               placeholder="Ask about machines, predictions, or maintenance..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               className="flex-1"
             />
-            <Button
-              variant="outline"
-              size="icon"
-              title="Voice input"
-            >
+            <Button variant="outline" size="icon" title="Voice input">
               <Mic className="w-4 h-4" />
             </Button>
-            <Button
-              onClick={handleSend}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
+            <Button onClick={handleSend} className="bg-blue-600 hover:bg-blue-700">
               <Send className="w-4 h-4" />
             </Button>
           </div>
