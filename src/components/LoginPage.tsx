@@ -108,15 +108,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                             />
                         </div>
 
-                        <div className='flex items-center justify-end'>
-                            <button
-                                type='button'
-                                className='text-blue-600 hover:text-blue-700'
-                            >
-                                Forgot Password?
-                            </button>
-                        </div>
-
                         <Button
                             type='submit'
                             className='w-full bg-blue-600 hover:bg-blue-700'
