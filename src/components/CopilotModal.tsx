@@ -337,12 +337,36 @@ export default function CopilotModal({ isOpen, onClose }: CopilotModalProps) {
                     </div>
                   )}
 
-                  {/* --- AI Message Feedback Icons --- */}
-                  {message.role === 'assistant' && (
-                    <div className="flex items-center gap-3 mt-3 text-slate-500">
-                      <Bot className="w-4 h-4 cursor-pointer hover:text-slate-700" />
-                      <ThumbsUp className="w-4 h-4 cursor-pointer hover:text-green-600" />
-                      <ThumbsDown className="w-4 h-4 cursor-pointer hover:text-red-600" />
+                  {/* --- AI Message Feedback Icons (buttons only, no business logic) --- */}
+                  {message.role === "assistant" && (
+                    <div className="flex items-center gap-2 mt-3 text-slate-500">
+                      <button
+                        type="button"
+                        aria-label="enhance"
+                        onClick={() => console.log("enhance clicked")}
+                        className="inline-flex items-center justify-center p-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        style={{ WebkitTapHighlightColor: "transparent" }}
+                      >
+                        <Bot className="w-4 h-4 pointer-events-auto" />
+                      </button>
+
+                      <button
+                        type="button"
+                        aria-label="like"
+                        onClick={() => console.log("like clicked")}
+                        className="inline-flex items-center justify-center p-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      >
+                        <ThumbsUp className="w-4 h-4 pointer-events-auto" />
+                      </button>
+
+                      <button
+                        type="button"
+                        aria-label="dislike"
+                        onClick={() => console.log("dislike clicked")}
+                        className="inline-flex items-center justify-center p-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      >
+                        <ThumbsDown className="w-4 h-4 pointer-events-auto" />
+                      </button>
                     </div>
                   )}
                 </div>
