@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import {
@@ -169,15 +169,10 @@ export default function MachineDetail() {
             })
     }, [machineId, API_BASE])
 
-    // When readings are available, classify the latest reading via POST /predict
-    useEffect(() => {
-        if (!readings || readings.length === 0) {
-            setClassification(null)
-            return
-        }
+    const latestReading = useMemo(() => {
+        if (!readings || readings.length === 0) return null
 
-        // find latest reading by timestamp if available
-        const latest = readings.reduce((best: any, cur: any) => {
+        return readings.reduce((best: any, cur: any) => {
             try {
                 const tbest =
                     best && best.timestamp
@@ -194,18 +189,30 @@ export default function MachineDetail() {
                 return best
             }
         }, readings[0])
+    }, [readings])
+
+    // When readings are available, classify the latest reading via POST /predict
+    useEffect(() => {
+        if (!latestReading) {
+            setClassification(null)
+            return
+        }
 
         const token = localStorage.getItem('access_token')
 
         const payload = {
             Air_temperature:
-                latest.air_temperature ?? latest.process_temperature ?? 0,
+                latestReading.air_temperature ??
+                latestReading.process_temperature ??
+                0,
             Process_temperature:
-                latest.process_temperature ?? latest.air_temperature ?? 0,
-            Rotational_speed: latest.rotational_speed ?? 0,
-            Torque: latest.torque ?? 0,
-            Tool_wear: latest.tool_wear ?? 0,
-            Type: (latest.machine_type ?? latest.machine_id)
+                latestReading.process_temperature ??
+                latestReading.air_temperature ??
+                0,
+            Rotational_speed: latestReading.rotational_speed ?? 0,
+            Torque: latestReading.torque ?? 0,
+            Tool_wear: latestReading.tool_wear ?? 0,
+            Type: (latestReading.machine_type ?? latestReading.machine_id)
                 ?.toString()
                 ?.startsWith('H')
                 ? 'H'
@@ -242,7 +249,7 @@ export default function MachineDetail() {
                 // keep classification null but show error in UI if needed
                 setClassification({ error: String(err) })
             })
-    }, [readings, API_BASE])
+    }, [latestReading, API_BASE])
 
     // prepare combined chart data: observed (db) + forecast series
     const chartData = React.useMemo(() => {
@@ -364,6 +371,56 @@ export default function MachineDetail() {
                     </div>
                 )}
             </div>
+
+            {latestReading && (
+                <div className='mb-6'>
+                    <h3 className='text-sm text-slate-500 mb-2'>
+                        Latest sensor snapshot
+                    </h3>
+                    <div className='grid grid-cols-2 md:grid-cols-5 gap-3'>
+                        <div className='bg-white border rounded p-3'>
+                            <div className='text-xs text-slate-500 mb-1'>
+                                Process Temperature
+                            </div>
+                            <div className='text-lg font-semibold text-slate-800'>
+                                {latestReading.process_temperature ?? 'N/A'}
+                            </div>
+                        </div>
+                        <div className='bg-white border rounded p-3'>
+                            <div className='text-xs text-slate-500 mb-1'>
+                                Air Temperature
+                            </div>
+                            <div className='text-lg font-semibold text-slate-800'>
+                                {latestReading.air_temperature ?? 'N/A'}
+                            </div>
+                        </div>
+                        <div className='bg-white border rounded p-3'>
+                            <div className='text-xs text-slate-500 mb-1'>
+                                Torque
+                            </div>
+                            <div className='text-lg font-semibold text-slate-800'>
+                                {latestReading.torque ?? 'N/A'}
+                            </div>
+                        </div>
+                        <div className='bg-white border rounded p-3'>
+                            <div className='text-xs text-slate-500 mb-1'>
+                                Rotational Speed
+                            </div>
+                            <div className='text-lg font-semibold text-slate-800'>
+                                {latestReading.rotational_speed ?? 'N/A'}
+                            </div>
+                        </div>
+                        <div className='bg-white border rounded p-3'>
+                            <div className='text-xs text-slate-500 mb-1'>
+                                Tool Wear
+                            </div>
+                            <div className='text-lg font-semibold text-slate-800'>
+                                {latestReading.tool_wear ?? 'N/A'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {loading && <div>Loading readings...</div>}
             {error && <div className='text-red-600'>Error: {error}</div>}
