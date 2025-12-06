@@ -42,6 +42,7 @@ export default function MachineDetail() {
     const [readings, setReadings] = useState<Reading[] | null>(null)
     const [forecast, setForecast] = useState<Reading[] | null>(null)
     const [classification, setClassification] = useState<any | null>(null)
+    const [fleetStatus, setFleetStatus] = useState<any | null>(null)
     const [loading, setLoading] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -80,14 +81,33 @@ export default function MachineDetail() {
 
         setLoading(true)
 
-        fetchJson(timelineUrl, {
-            method: 'GET',
-            headers: {
-                Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-        })
-            .then((timelineResp) => {
+        // Fetch timeline for chart + fetch fleet classification for consistency
+        Promise.all([
+            fetchJson(timelineUrl, {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            }),
+            fetchJson(`${API_BASE}/machine-status`, {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            }).catch(() => null),
+        ])
+            .then(([timelineResp, statusResp]) => {
+                // Store fleet status entry for this machine if present
+                if (statusResp && Array.isArray(statusResp.machines)) {
+                    const found = statusResp.machines.find(
+                        (m: any) =>
+                            (m.machine_id ?? '').toString() === machineId
+                    )
+                    if (found) setFleetStatus(found)
+                }
+
                 const readingsResp = timelineResp?.last_readings ?? []
                 const forecastResp = timelineResp?.forecast_data ?? []
 
@@ -294,13 +314,24 @@ export default function MachineDetail() {
                 }
             })
             .then((data) => {
-                setClassification(data)
+                // Prefer fleetStatus label if available to stay consistent with FleetOverview
+                if (fleetStatus && fleetStatus.prediction_label) {
+                    setClassification({
+                        ...data,
+                        prediction_label: fleetStatus.prediction_label,
+                        prediction_numeric: fleetStatus.prediction_numeric,
+                        probabilities:
+                            fleetStatus.probabilities ?? data.probabilities,
+                    })
+                } else {
+                    setClassification(data)
+                }
             })
             .catch((err: any) => {
                 // keep classification null but show error in UI if needed
                 setClassification({ error: String(err) })
             })
-    }, [latestReading, API_BASE])
+    }, [latestReading, API_BASE, fleetStatus, machineId])
 
     // prepare combined chart data: observed (db) + forecast series
     const chartData = React.useMemo(() => {

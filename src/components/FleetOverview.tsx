@@ -32,6 +32,7 @@ const defaultMachines = [
         id: 'M001',
         name: 'Pump Station A-12',
         status: 'Normal',
+        failureType: 'Unknown',
         riskScore: 12,
         location: 'Building A, Floor 2',
         lastMaintenance: '2025-10-15',
@@ -40,6 +41,7 @@ const defaultMachines = [
         id: 'M002',
         name: 'Compressor B-04',
         status: 'Watch',
+        failureType: 'Unknown',
         riskScore: 58,
         location: 'Building B, Floor 1',
         lastMaintenance: '2025-09-20',
@@ -48,6 +50,7 @@ const defaultMachines = [
         id: 'M003',
         name: 'Motor Drive C-33',
         status: 'Risk',
+        failureType: 'Unknown',
         riskScore: 87,
         location: 'Building C, Floor 3',
         lastMaintenance: '2025-08-10',
@@ -56,6 +59,8 @@ const defaultMachines = [
 
 export default function FleetOverview() {
     const navigate = useNavigate()
+    const API_BASE =
+        (import.meta as any)?.env?.VITE_API_BASE_URL ?? 'http://localhost:8000'
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [sortBy, setSortBy] = useState<string | null>(null)
@@ -74,7 +79,7 @@ export default function FleetOverview() {
                     return
                 }
 
-                const response = await fetch('http://localhost:8000/readings', {
+                const response = await fetch(`${API_BASE}/machine-status`, {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     },
@@ -82,18 +87,22 @@ export default function FleetOverview() {
 
                 if (response.ok) {
                     const data = await response.json()
-                    if (data.machine_ids && Array.isArray(data.machine_ids)) {
-                        // Convert machine IDs to machine objects
-                        const machineList = data.machine_ids.map(
-                            (id: string) => ({
-                                id,
-                                name: `Machine ${id}`,
-                                status: 'Normal',
+                    const machinesResp = data?.machines ?? []
+                    if (Array.isArray(machinesResp)) {
+                        const machineList = machinesResp.map((m: any) => {
+                            const label = m.prediction_label ?? 'Unknown'
+                            const status =
+                                label === 'No Failure' ? 'Normal' : 'Risk'
+                            return {
+                                id: m.machine_id ?? 'Unknown',
+                                name: `Machine ${m.machine_id ?? 'Unknown'}`,
+                                status,
+                                failureType: label,
                                 riskScore: Math.floor(Math.random() * 100),
                                 location: 'TBD',
                                 lastMaintenance: '2025-12-01',
-                            })
-                        )
+                            }
+                        })
                         setMachines(machineList)
                     }
                 } else {
@@ -347,6 +356,7 @@ export default function FleetOverview() {
                                     </button>
                                 </div>
                             </TableHead>
+                            <TableHead>Failure Type</TableHead>
                             <TableHead>
                                 <div className='flex items-center justify-between'>
                                     <div className='flex items-center gap-2'>
@@ -409,6 +419,15 @@ export default function FleetOverview() {
                                         {getStatusIcon(machine.status)}
                                         {machine.status}
                                     </Badge>
+                                </TableCell>
+                                <TableCell>
+                                    {loading ? (
+                                        <span className='text-slate-400 text-sm'>
+                                            Loading...
+                                        </span>
+                                    ) : (
+                                        machine.failureType ?? 'Unknown'
+                                    )}
                                 </TableCell>
                                 <TableCell>
                                     <span
