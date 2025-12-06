@@ -78,7 +78,7 @@ export default function MachineDetail() {
 
         const readingsUrl = `${API_BASE}/readings?machine_id=${encodeURIComponent(
             machineId
-        )}&limit=300`
+        )}&limit=50`
         const forecastUrl = `${API_BASE}/forecast`
 
         setLoading(true)
@@ -99,8 +99,7 @@ export default function MachineDetail() {
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
                 body: JSON.stringify({
-                    machine_id: machineId,
-                    forecast_minutes: 300,
+                    forecast_minutes: 100,
                 }),
             }),
         ])
@@ -109,29 +108,56 @@ export default function MachineDetail() {
                 const arr = Array.isArray(readingsResp)
                     ? readingsResp
                     : readingsResp?.readings ?? readingsResp
-                const normalized = (Array.isArray(arr) ? arr : [])
-                    .slice(0, 300)
-                    .map((r: any) => ({
-                        timestamp: r.timestamp ?? r.ts ?? r.time,
-                        machine_id: r.machine_id ?? r.machineId,
-                        process_temperature:
-                            r.process_temperature ??
-                            r.processTemperature ??
-                            r.process_temp ??
-                            null,
-                        torque: r.torque ?? null,
-                        air_temperature:
-                            r.air_temperature ??
-                            r.airTemperature ??
-                            r.air_temp ??
-                            null,
-                        tool_wear: r.tool_wear ?? r.toolWear ?? null,
-                        rotational_speed:
-                            r.rotational_speed ??
-                            r.rotationalSpeed ??
-                            r.rpm ??
-                            null,
-                    }))
+
+                const normalizeReadings = (input: any[]) =>
+                    (Array.isArray(input) ? input : [])
+                        .slice(0, 50)
+                        .map((r: any, idx: number, all: any[]) => {
+                            // If no timestamp in DB row, synthesize one so chart continuity works
+                            const syntheticTs =
+                                Date.now() - (all.length - idx) * 60 * 1000
+
+                            return {
+                                timestamp:
+                                    r.timestamp ??
+                                    r.ts ??
+                                    r.time ??
+                                    r['timestamp'] ??
+                                    new Date(syntheticTs).toISOString(),
+                                machine_id:
+                                    r.machine_id ??
+                                    r.machineId ??
+                                    r['Product ID'] ??
+                                    r.product_id ??
+                                    null,
+                                process_temperature:
+                                    r.process_temperature ??
+                                    r.processTemperature ??
+                                    r.process_temp ??
+                                    r['Process temperature [K]'] ??
+                                    null,
+                                torque: r.torque ?? r['Torque [Nm]'] ?? null,
+                                air_temperature:
+                                    r.air_temperature ??
+                                    r.airTemperature ??
+                                    r.air_temp ??
+                                    r['Air temperature [K]'] ??
+                                    null,
+                                tool_wear:
+                                    r.tool_wear ??
+                                    r.toolWear ??
+                                    r['Tool wear [min]'] ??
+                                    null,
+                                rotational_speed:
+                                    r.rotational_speed ??
+                                    r.rotationalSpeed ??
+                                    r.rpm ??
+                                    r['Rotational speed [rpm]'] ??
+                                    null,
+                            }
+                        })
+
+                const normalized = normalizeReadings(arr)
 
                 // normalize forecast: forecastResp may be { forecast_data: [...] }
                 const farr = Array.isArray(forecastResp)
@@ -140,24 +166,62 @@ export default function MachineDetail() {
                       forecastResp?.forecast ??
                       []
                 const normalizedForecast = (Array.isArray(farr) ? farr : [])
-                    .slice(0, 300)
+                    .slice(0, 100)
                     .map((r: any) => ({
                         timestamp: r.timestamp ?? r.ts ?? r.time,
                         machine_id: r.machine_id ?? r.machineId ?? machineId,
                         process_temperature:
                             r.process_temperature ??
                             r.processTemperature ??
+                            r['Process temperature [K]'] ??
                             null,
                         torque: r.torque ?? null,
                         air_temperature:
-                            r.air_temperature ?? r.airTemperature ?? null,
-                        tool_wear: r.tool_wear ?? r.toolWear ?? null,
+                            r.air_temperature ??
+                            r.airTemperature ??
+                            r['Air temperature [K]'] ??
+                            null,
+                        tool_wear:
+                            r.tool_wear ??
+                            r.toolWear ??
+                            r['Tool wear [min]'] ??
+                            null,
                         rotational_speed:
                             r.rotational_speed ??
                             r.rotationalSpeed ??
                             r.rpm ??
+                            r['Rotational speed [rpm]'] ??
                             null,
                     }))
+
+                // If no readings came back for this machine_id, retry without filter to show sample data
+                if (normalized.length === 0) {
+                    const fallbackUrl = `${API_BASE}/readings?limit=50`
+                    fetchJson(fallbackUrl, {
+                        method: 'GET',
+                        headers: {
+                            Accept: 'application/json',
+                            ...(token
+                                ? { Authorization: `Bearer ${token}` }
+                                : {}),
+                        },
+                    })
+                        .then((fallbackResp) => {
+                            const arr2 = Array.isArray(fallbackResp)
+                                ? fallbackResp
+                                : fallbackResp?.readings ?? fallbackResp
+                            const normalizedFallback = normalizeReadings(arr2)
+                            setReadings(normalizedFallback)
+                            setForecast(normalizedForecast)
+                            setLoading(false)
+                        })
+                        .catch((err2: any) => {
+                            setError(String(err2))
+                            setForecast(normalizedForecast)
+                            setLoading(false)
+                        })
+                    return
+                }
 
                 setReadings(normalized)
                 setForecast(normalizedForecast)
@@ -271,6 +335,16 @@ export default function MachineDetail() {
         obs.sort(sortByTime)
         fcd.sort(sortByTime)
 
+        // Determine the last observed timestamp to anchor forecast continuity
+        const lastObsTimeMs = (() => {
+            for (let i = obs.length - 1; i >= 0; i -= 1) {
+                const t = obs[i]?.timestamp
+                const ms = t ? new Date(t).getTime() : Number.NaN
+                if (!Number.isNaN(ms)) return ms
+            }
+            return Number.NaN
+        })()
+
         const obsMapped = obs.map((r: any, idx: number) => ({
             time:
                 r.timestamp && !Number.isNaN(new Date(r.timestamp).getTime())
@@ -284,10 +358,19 @@ export default function MachineDetail() {
         }))
 
         const fcdMapped = fcd.map((r: any, idx: number) => ({
-            time:
-                r.timestamp && !Number.isNaN(new Date(r.timestamp).getTime())
-                    ? new Date(r.timestamp).toLocaleString()
-                    : String(idx + 1),
+            time: (() => {
+                const forecastMs = r.timestamp
+                    ? new Date(r.timestamp).getTime()
+                    : Number.NaN
+                if (!Number.isNaN(forecastMs)) {
+                    return new Date(forecastMs).toLocaleString()
+                }
+                if (!Number.isNaN(lastObsTimeMs)) {
+                    const t = lastObsTimeMs + (idx + 1) * 60 * 1000
+                    return new Date(t).toLocaleString()
+                }
+                return String(obs.length + idx + 1)
+            })(),
             forecast_process_temperature: r.process_temperature ?? null,
             forecast_torque: r.torque ?? null,
             forecast_air_temperature: r.air_temperature ?? null,
@@ -295,7 +378,7 @@ export default function MachineDetail() {
             forecast_rotational_speed: r.rotational_speed ?? null,
         }))
 
-        // combine: observed first, forecast appended
+        // combine: observed first, forecast appended (times already made continuous)
         return [...obsMapped, ...fcdMapped]
     }, [readings, forecast])
 
@@ -428,9 +511,10 @@ export default function MachineDetail() {
             {!loading && !error && chartData.length > 0 && (
                 <div>
                     <p className='mb-2'>
-                        Showing {readings ? readings.length : 0} observed
-                        readings and {forecast ? forecast.length : 0} forecast
-                        points (up to 300 each).
+                        Showing up to 50 observed readings and 100 forecast
+                        points (actual returned:{' '}
+                        {readings ? readings.length : 0} observed,{' '}
+                        {forecast ? forecast.length : 0} forecast).
                     </p>
 
                     <div className='grid gap-6'>
