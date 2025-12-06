@@ -110,7 +110,7 @@ export default function MachineDetail() {
                     : readingsResp?.readings ?? readingsResp
 
                 const normalizeReadings = (input: any[]) =>
-                    (Array.isArray(input) ? input : [])
+                    (Array.isArray(input) ? input.reverse() : [])
                         .slice(0, 50)
                         .map((r: any, idx: number, all: any[]) => {
                             // If no timestamp in DB row, synthesize one so chart continuity works
