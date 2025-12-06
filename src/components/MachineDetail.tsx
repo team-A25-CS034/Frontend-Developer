@@ -181,7 +181,6 @@ export default function MachineDetail() {
                             null,
                     }))
 
-
                 // If no readings came back for this machine_id, retry without filter to show sample data
                 if (normalized.length === 0) {
                     const fallbackUrl = `${API_BASE}/readings?limit=50`
