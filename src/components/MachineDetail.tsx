@@ -382,6 +382,30 @@ export default function MachineDetail() {
         return [...obsMapped, ...fcdMapped]
     }, [readings, forecast])
 
+    // Calculate dynamic Y-axis domains from observed + forecast data
+    const yAxisDomains = React.useMemo(() => {
+        const allData = [...(readings || []), ...(forecast || [])]
+
+        const calcDomain = (field: string) => {
+            const values = allData
+                .map((d: any) => d[field])
+                .filter((v: any) => v != null && !isNaN(v))
+            if (values.length === 0) return undefined
+            const min = Math.min(...values)
+            const max = Math.max(...values)
+            const padding = (max - min) * 0.1 || 1
+            return [Math.floor(min - padding), Math.ceil(max + padding)]
+        }
+
+        return {
+            process_temperature: calcDomain('process_temperature'),
+            torque: calcDomain('torque'),
+            air_temperature: calcDomain('air_temperature'),
+            tool_wear: calcDomain('tool_wear'),
+            rotational_speed: calcDomain('rotational_speed'),
+        }
+    }, [readings, forecast])
+
     return (
         <div className='p-6'>
             <div className='mb-4'>
@@ -533,7 +557,11 @@ export default function MachineDetail() {
                                         dataKey='time'
                                         minTickGap={20}
                                     />
-                                    <YAxis />
+                                    <YAxis
+                                        domain={
+                                            yAxisDomains.process_temperature
+                                        }
+                                    />
                                     <Tooltip />
                                     <Legend />
                                     <Line
@@ -568,7 +596,7 @@ export default function MachineDetail() {
                                         dataKey='time'
                                         minTickGap={20}
                                     />
-                                    <YAxis />
+                                    <YAxis domain={yAxisDomains.torque} />
                                     <Tooltip />
                                     <Legend />
                                     <Line
@@ -605,7 +633,9 @@ export default function MachineDetail() {
                                         dataKey='time'
                                         minTickGap={20}
                                     />
-                                    <YAxis />
+                                    <YAxis
+                                        domain={yAxisDomains.air_temperature}
+                                    />
                                     <Tooltip />
                                     <Legend />
                                     <Line
@@ -640,7 +670,7 @@ export default function MachineDetail() {
                                         dataKey='time'
                                         minTickGap={20}
                                     />
-                                    <YAxis />
+                                    <YAxis domain={yAxisDomains.tool_wear} />
                                     <Tooltip />
                                     <Legend />
                                     <Line
@@ -677,7 +707,9 @@ export default function MachineDetail() {
                                         dataKey='time'
                                         minTickGap={20}
                                     />
-                                    <YAxis />
+                                    <YAxis
+                                        domain={yAxisDomains.rotational_speed}
+                                    />
                                     <Tooltip />
                                     <Legend />
                                     <Line
