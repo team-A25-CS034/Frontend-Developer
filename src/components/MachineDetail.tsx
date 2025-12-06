@@ -76,34 +76,21 @@ export default function MachineDetail() {
             }
         }
 
-        const readingsUrl = `${API_BASE}/readings?machine_id=${encodeURIComponent(
-            machineId
-        )}&limit=50`
-        const forecastUrl = `${API_BASE}/forecast`
+        const timelineUrl = `${API_BASE}/timeline?limit=50&forecast_minutes=100`
 
         setLoading(true)
 
-        Promise.all([
-            fetchJson(readingsUrl, {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-            }),
-            fetchJson(forecastUrl, {
-                method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                body: JSON.stringify({
-                    forecast_minutes: 100,
-                }),
-            }),
-        ])
-            .then(([readingsResp, forecastResp]) => {
+        fetchJson(timelineUrl, {
+            method: 'GET',
+            headers: {
+                Accept: 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+        })
+            .then((timelineResp) => {
+                const readingsResp = timelineResp?.last_readings ?? []
+                const forecastResp = timelineResp?.forecast_data ?? []
+
                 // normalize readings
                 const arr = Array.isArray(readingsResp)
                     ? readingsResp
@@ -193,6 +180,7 @@ export default function MachineDetail() {
                             r['Rotational speed [rpm]'] ??
                             null,
                     }))
+
 
                 // If no readings came back for this machine_id, retry without filter to show sample data
                 if (normalized.length === 0) {

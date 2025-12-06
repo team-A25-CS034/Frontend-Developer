@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
     Search,
@@ -26,10 +26,10 @@ import {
     TableRow,
 } from './ui/table'
 
-// Mock data
-const machines = [
+// Default mock data for fallback
+const defaultMachines = [
     {
-        id: 'machine_01',
+        id: 'M001',
         name: 'Pump Station A-12',
         status: 'Normal',
         riskScore: 12,
@@ -37,7 +37,7 @@ const machines = [
         lastMaintenance: '2025-10-15',
     },
     {
-        id: 'machine_02',
+        id: 'M002',
         name: 'Compressor B-04',
         status: 'Watch',
         riskScore: 58,
@@ -45,36 +45,12 @@ const machines = [
         lastMaintenance: '2025-09-20',
     },
     {
-        id: 'machine_03',
+        id: 'M003',
         name: 'Motor Drive C-33',
         status: 'Risk',
         riskScore: 87,
         location: 'Building C, Floor 3',
         lastMaintenance: '2025-08-10',
-    },
-    {
-        id: 'machine_04',
-        name: 'Turbine D-21',
-        status: 'Normal',
-        riskScore: 24,
-        location: 'Building D, Floor 1',
-        lastMaintenance: '2025-11-01',
-    },
-    {
-        id: 'machine_05',
-        name: 'Generator E-15',
-        status: 'Watch',
-        riskScore: 64,
-        location: 'Building E, Floor 2',
-        lastMaintenance: '2025-09-15',
-    },
-    {
-        id: 'machine_06',
-        name: 'Cooling Unit F-08',
-        status: 'Normal',
-        riskScore: 18,
-        location: 'Building F, Floor 1',
-        lastMaintenance: '2025-10-28',
     },
 ]
 
@@ -84,6 +60,54 @@ export default function FleetOverview() {
     const [statusFilter, setStatusFilter] = useState('all')
     const [sortBy, setSortBy] = useState<string | null>(null)
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+    const [machines, setMachines] = useState(defaultMachines)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchMachineIds = async () => {
+            try {
+                // Get token from localStorage
+                const token = localStorage.getItem('access_token')
+                if (!token) {
+                    console.error('No access token found')
+                    setLoading(false)
+                    return
+                }
+
+                const response = await fetch('http://localhost:8000/readings', {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                })
+
+                if (response.ok) {
+                    const data = await response.json()
+                    if (data.machine_ids && Array.isArray(data.machine_ids)) {
+                        // Convert machine IDs to machine objects
+                        const machineList = data.machine_ids.map(
+                            (id: string) => ({
+                                id,
+                                name: `Machine ${id}`,
+                                status: 'Normal',
+                                riskScore: Math.floor(Math.random() * 100),
+                                location: 'TBD',
+                                lastMaintenance: '2025-12-01',
+                            })
+                        )
+                        setMachines(machineList)
+                    }
+                } else {
+                    console.error('Failed to fetch machine IDs')
+                }
+            } catch (error) {
+                console.error('Error fetching machine IDs:', error)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchMachineIds()
+    }, [])
 
     const getStatusColor = (status: string) => {
         switch (status) {
