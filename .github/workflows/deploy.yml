@@ -53,7 +53,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --execution-environment=gen2 \
-            --memory=1Mi \
+            --memory=128Mi \
             --cpu=2 \
             --no-cpu-throttling \
             --min-instances=0 \
