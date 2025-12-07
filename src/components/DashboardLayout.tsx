@@ -8,6 +8,7 @@ import {
   Building2,
   Bot,
 } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 // keep styling consistent with nav items for Copilot
 import { Avatar, AvatarFallback } from './ui/avatar';
 
@@ -89,6 +90,7 @@ export default function DashboardLayout({ children, onOpenCopilot }: DashboardLa
           </h1>
           
           <div className="flex items-center gap-4">
+            <NotificationBell />
             <Avatar>
               <AvatarFallback className="bg-blue-100 text-blue-700">
                 JD
