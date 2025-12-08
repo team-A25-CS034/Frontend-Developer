@@ -8,6 +8,7 @@ import {
   Building2,
   Bot,
   Upload,
+  LogOut,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 // keep styling consistent with nav items for Copilot
@@ -17,15 +18,15 @@ interface DashboardLayoutProps {
   children: ReactNode;
   onOpenCopilot?: () => void;
   onOpenUpload?: () => void;
+  onLogout?: () => void;
 }
 
-export default function DashboardLayout({ children, onOpenCopilot, onOpenUpload }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, onOpenCopilot, onOpenUpload, onLogout }: DashboardLayoutProps) {
   const location = useLocation();
 
   const navigation = [
     { name: 'Fleet', href: '/fleet', icon: LayoutGrid },
     { name: 'Tickets', href: '/tickets', icon: FileText },
-    { name: 'Profile', href: '/profile', icon: User },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -49,50 +50,68 @@ export default function DashboardLayout({ children, onOpenCopilot, onOpenUpload 
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            return (
-              <div key={item.name}>
-                <Link
-                  to={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive(item.href)
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.name}</span>
-                </Link>
-                {item.name === 'Tickets' && (
-                  // Render Copilot as a nav-style item (same classes as links)
-                  <>
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={() => onOpenCopilot && onOpenCopilot()}
-                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
-                      >
-                        <Bot className="w-4 h-4" />
-                        <span>Ask Copilot</span>
-                      </button>
-                    </div>
-                    <div className="mt-1">
-                      <button
-                        type="button"
-                        onClick={() => onOpenUpload && onOpenUpload()}
-                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
-                      >
-                        <Upload className="w-4 h-4" />
-                        <span>Upload Data</span>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
+          <div>
+            <Link
+              to="/fleet"
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                isActive('/fleet')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="w-5 h-5" />
+              <span>Fleet</span>
+            </Link>
+          </div>
+
+          <div>
+            <Link
+              to="/tickets"
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                isActive('/tickets')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+              <span>Tickets</span>
+            </Link>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => onOpenCopilot && onOpenCopilot()}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
+            >
+              <Bot className="w-5 h-5" />
+              <span>Ask Copilot</span>
+            </button>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => onOpenUpload && onOpenUpload()}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
+            >
+              <Upload className="w-5 h-5" />
+              <span>Upload Data</span>
+            </button>
+          </div>
         </nav>
+
+        {/* Logout button at bottom */}
+        <div className="p-4 border-t border-slate-800">
+          <button
+            type="button"
+            onClick={() => onLogout && onLogout()}
+            className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}

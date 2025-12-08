@@ -5,7 +5,6 @@ import DashboardLayout from './components/DashboardLayout';
 import FleetOverview from './components/FleetOverview';
 import MachineDetail from './components/MachineDetail';
 import TicketSimulation from './components/TicketSimulation';
-import ProfileSettings from './components/ProfileSettings';
 import CopilotModal from './components/CopilotModal';
 import UploadModal from './components/UploadModal';
 import Wireframes from './components/Wireframes';
@@ -60,13 +59,13 @@ export default function App() {
                     setIsCopilotOpen(true);
                   }}
                   onOpenUpload={() => setIsUploadOpen(true)}
+                  onLogout={() => setIsAuthenticated(false)}
                 >
                   <Routes>
                     <Route path="/fleet" element={<FleetOverview />} />
                     <Route path="/machine/:id" element={<MachineDetail />} />
                     {/* Alerts feature removed */}
                     <Route path="/tickets" element={<TicketSimulation />} />
-                    <Route path="/profile" element={<ProfileSettings />} />
                     <Route path="/" element={<Navigate to="/fleet" replace />} />
                   </Routes>
                 </DashboardLayout>
