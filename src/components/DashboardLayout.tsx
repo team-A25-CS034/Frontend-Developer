@@ -7,6 +7,7 @@ import {
   User, 
   Building2,
   Bot,
+  Upload,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 // keep styling consistent with nav items for Copilot
@@ -15,9 +16,10 @@ import { Avatar, AvatarFallback } from './ui/avatar';
 interface DashboardLayoutProps {
   children: ReactNode;
   onOpenCopilot?: () => void;
+  onOpenUpload?: () => void;
 }
 
-export default function DashboardLayout({ children, onOpenCopilot }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, onOpenCopilot, onOpenUpload }: DashboardLayoutProps) {
   const location = useLocation();
 
   const navigation = [
@@ -64,16 +66,28 @@ export default function DashboardLayout({ children, onOpenCopilot }: DashboardLa
                 </Link>
                 {item.name === 'Tickets' && (
                   // Render Copilot as a nav-style item (same classes as links)
-                  <div className="mt-3">
-                    <button
-                      type="button"
-                      onClick={() => onOpenCopilot && onOpenCopilot()}
-                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
-                    >
-                      <Bot className="w-4 h-4" />
-                      <span>Ask Copilot</span>
-                    </button>
-                  </div>
+                  <>
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => onOpenCopilot && onOpenCopilot()}
+                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
+                      >
+                        <Bot className="w-4 h-4" />
+                        <span>Ask Copilot</span>
+                      </button>
+                    </div>
+                    <div className="mt-1">
+                      <button
+                        type="button"
+                        onClick={() => onOpenUpload && onOpenUpload()}
+                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Data</span>
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             );

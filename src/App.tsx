@@ -7,6 +7,7 @@ import MachineDetail from './components/MachineDetail';
 import TicketSimulation from './components/TicketSimulation';
 import ProfileSettings from './components/ProfileSettings';
 import CopilotModal from './components/CopilotModal';
+import UploadModal from './components/UploadModal';
 import Wireframes from './components/Wireframes';
 import { CopilotProvider } from './contexts/CopilotContext';
 
@@ -14,6 +15,7 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [isCopilotMinimized, setIsCopilotMinimized] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
 
   return (
     <Router>
@@ -52,10 +54,13 @@ export default function App() {
                 isOpen={isCopilotOpen}
                 isMinimized={isCopilotMinimized}
               >
-                <DashboardLayout onOpenCopilot={() => {
-                  setIsCopilotMinimized(false);
-                  setIsCopilotOpen(true);
-                }}>
+                <DashboardLayout 
+                  onOpenCopilot={() => {
+                    setIsCopilotMinimized(false);
+                    setIsCopilotOpen(true);
+                  }}
+                  onOpenUpload={() => setIsUploadOpen(true)}
+                >
                   <Routes>
                     <Route path="/fleet" element={<FleetOverview />} />
                     <Route path="/machine/:id" element={<MachineDetail />} />
@@ -68,6 +73,10 @@ export default function App() {
                 <CopilotModal
                   isOpen={isCopilotOpen}
                   onClose={() => setIsCopilotOpen(false)}
+                />
+                <UploadModal
+                  isOpen={isUploadOpen}
+                  onClose={() => setIsUploadOpen(false)}
                 />
                 {/* Minimized bar/button rendered when user minimizes the chat */}
                 {isCopilotMinimized && (
