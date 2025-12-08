@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle, Activity, Zap, Clock, TrendingUp, Calendar } from 'lucide-react'
 import {
     ResponsiveContainer,
     LineChart,
@@ -13,770 +13,434 @@ import {
     BarChart,
     Bar,
 } from 'recharts'
+import { Button } from './ui/button'
 
-// Mock maintenance history
-const maintenanceHistory = [
-    { month: 'May', count: 2 },
-    { month: 'Jun', count: 1 },
-    { month: 'Jul', count: 3 },
-    { month: 'Aug', count: 1 },
-    { month: 'Sep', count: 2 },
-    { month: 'Oct', count: 1 },
-]
-
-type Reading = {
-    timestamp?: string | number
+interface SensorData {
+    _id?: string
+    timestamp?: string
     machine_id?: string
-    process_temperature?: number | null
-    torque?: number | null
-    air_temperature?: number | null
-    tool_wear?: number | null
-    rotational_speed?: number | null
+    machine_type?: string
+    air_temperature: number
+    process_temperature: number
+    rotational_speed: number
+    torque: number
+    tool_wear: number
     [key: string]: any
 }
+
+interface TimelineResponse {
+    last_readings: SensorData[]
+    forecast_minutes: number
+    forecast_data: SensorData[]
+    created_at: string
+}
+
+interface MachineStatusItem {
+    machine_id: string
+    status: string
+    prediction: string
+    confidence: number[]
+    last_updated: string
+}
+
+interface MachineStatusResponse {
+    count: number
+    machines: MachineStatusItem[]
+}
+
+interface PredictResponse {
+    prediction_numeric: number
+    prediction_label: string
+    probabilities: number[]
+}
+
+const maintenanceHistory = [
+    { month: 'Mei', count: 2 },
+    { month: 'Jun', count: 1 },
+    { month: 'Jul', count: 3 },
+    { month: 'Agu', count: 1 },
+    { month: 'Sep', count: 2 },
+    { month: 'Okt', count: 1 },
+]
 
 export default function MachineDetail() {
     const { id } = useParams()
     const machineId = id ?? ''
     const navigate = useNavigate()
-    const [readings, setReadings] = useState<Reading[] | null>(null)
-    const [forecast, setForecast] = useState<Reading[] | null>(null)
-    const [classification, setClassification] = useState<any | null>(null)
-    const [fleetStatus, setFleetStatus] = useState<any | null>(null)
+    
+    const [readings, setReadings] = useState<SensorData[]>([])
+    const [forecast, setForecast] = useState<SensorData[]>([])
+    const [classification, setClassification] = useState<PredictResponse | null>(null)
+    const [lastUpdated, setLastUpdated] = useState<string>('-')
     const [loading, setLoading] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
 
-    const API_BASE =
+     const API_BASE =
         (import.meta as any)?.env?.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 
-    useEffect(() => {
-        if (!machineId) {
-            setError('No machine id provided in route parameters.')
-            setLoading(false)
-            return
-        }
-        const token = localStorage.getItem('access_token')
-
-        const fetchJson = async (input: RequestInfo, init?: RequestInit) => {
-            const res = await fetch(input, init)
-            const ct = (res.headers.get('content-type') || '').toLowerCase()
-            const raw = await res.text()
-            if (!res.ok) {
-                throw new Error(`${res.status} ${res.statusText} ${raw}`)
-            }
-            if (ct.includes('text/html')) {
-                throw new Error(
-                    'Received HTML response instead of JSON. Check API base or proxy. Snippet: ' +
-                        raw.slice(0, 500)
-                )
-            }
-            try {
-                return JSON.parse(raw)
-            } catch (e) {
-                throw new Error('Invalid JSON response: ' + raw.slice(0, 1000))
-            }
-        }
-
-        const timelineUrl = `${API_BASE}/timeline?limit=50&forecast_minutes=100`
-
+    const fetchData = async () => {
+        if (!machineId) return
         setLoading(true)
-
-        // Fetch timeline for chart + fetch fleet classification for consistency
-        Promise.all([
-            fetchJson(timelineUrl, {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-            }),
-            fetchJson(`${API_BASE}/machine-status`, {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-            }).catch(() => null),
-        ])
-            .then(([timelineResp, statusResp]) => {
-                // Store fleet status entry for this machine if present
-                if (statusResp && Array.isArray(statusResp.machines)) {
-                    const found = statusResp.machines.find(
-                        (m: any) =>
-                            (m.machine_id ?? '').toString() === machineId
-                    )
-                    if (found) setFleetStatus(found)
-                }
-
-                const readingsResp = timelineResp?.last_readings ?? []
-                const forecastResp = timelineResp?.forecast_data ?? []
-
-                // normalize readings
-                const arr = Array.isArray(readingsResp)
-                    ? readingsResp
-                    : readingsResp?.readings ?? readingsResp
-
-                const normalizeReadings = (input: any[]) =>
-                    (Array.isArray(input) ? input.reverse() : [])
-                        .slice(0, 50)
-                        .map((r: any, idx: number, all: any[]) => {
-                            // If no timestamp in DB row, synthesize one so chart continuity works
-                            const syntheticTs =
-                                Date.now() - (all.length - idx) * 60 * 1000
-
-                            return {
-                                timestamp:
-                                    r.timestamp ??
-                                    r.ts ??
-                                    r.time ??
-                                    r['timestamp'] ??
-                                    new Date(syntheticTs).toISOString(),
-                                machine_id:
-                                    r.machine_id ??
-                                    r.machineId ??
-                                    r['Product ID'] ??
-                                    r.product_id ??
-                                    null,
-                                process_temperature:
-                                    r.process_temperature ??
-                                    r.processTemperature ??
-                                    r.process_temp ??
-                                    r['Process temperature [K]'] ??
-                                    null,
-                                torque: r.torque ?? r['Torque [Nm]'] ?? null,
-                                air_temperature:
-                                    r.air_temperature ??
-                                    r.airTemperature ??
-                                    r.air_temp ??
-                                    r['Air temperature [K]'] ??
-                                    null,
-                                tool_wear:
-                                    r.tool_wear ??
-                                    r.toolWear ??
-                                    r['Tool wear [min]'] ??
-                                    null,
-                                rotational_speed:
-                                    r.rotational_speed ??
-                                    r.rotationalSpeed ??
-                                    r.rpm ??
-                                    r['Rotational speed [rpm]'] ??
-                                    null,
-                            }
-                        })
-
-                const normalized = normalizeReadings(arr)
-
-                // normalize forecast: forecastResp may be { forecast_data: [...] }
-                const farr = Array.isArray(forecastResp)
-                    ? forecastResp
-                    : forecastResp?.forecast_data ??
-                      forecastResp?.forecast ??
-                      []
-                const normalizedForecast = (Array.isArray(farr) ? farr : [])
-                    .slice(0, 100)
-                    .map((r: any) => ({
-                        timestamp: r.timestamp ?? r.ts ?? r.time,
-                        machine_id: r.machine_id ?? r.machineId ?? machineId,
-                        process_temperature:
-                            r.process_temperature ??
-                            r.processTemperature ??
-                            r['Process temperature [K]'] ??
-                            null,
-                        torque: r.torque ?? null,
-                        air_temperature:
-                            r.air_temperature ??
-                            r.airTemperature ??
-                            r['Air temperature [K]'] ??
-                            null,
-                        tool_wear:
-                            r.tool_wear ??
-                            r.toolWear ??
-                            r['Tool wear [min]'] ??
-                            null,
-                        rotational_speed:
-                            r.rotational_speed ??
-                            r.rotationalSpeed ??
-                            r.rpm ??
-                            r['Rotational speed [rpm]'] ??
-                            null,
-                    }))
-
-                // If no readings came back for this machine_id, retry without filter to show sample data
-                if (normalized.length === 0) {
-                    const fallbackUrl = `${API_BASE}/readings?limit=50`
-                    fetchJson(fallbackUrl, {
-                        method: 'GET',
-                        headers: {
-                            Accept: 'application/json',
-                            ...(token
-                                ? { Authorization: `Bearer ${token}` }
-                                : {}),
-                        },
-                    })
-                        .then((fallbackResp) => {
-                            const arr2 = Array.isArray(fallbackResp)
-                                ? fallbackResp
-                                : fallbackResp?.readings ?? fallbackResp
-                            const normalizedFallback = normalizeReadings(arr2)
-                            setReadings(normalizedFallback)
-                            setForecast(normalizedForecast)
-                            setLoading(false)
-                        })
-                        .catch((err2: any) => {
-                            setError(String(err2))
-                            setForecast(normalizedForecast)
-                            setLoading(false)
-                        })
-                    return
-                }
-
-                setReadings(normalized)
-                setForecast(normalizedForecast)
-                setLoading(false)
-            })
-            .catch((err: any) => {
-                setError(String(err))
-                setLoading(false)
-            })
-    }, [machineId, API_BASE])
-
-    const latestReading = useMemo(() => {
-        if (!readings || readings.length === 0) return null
-
-        return readings.reduce((best: any, cur: any) => {
-            try {
-                const tbest =
-                    best && best.timestamp
-                        ? new Date(best.timestamp).getTime()
-                        : Number.NaN
-                const tcur =
-                    cur && cur.timestamp
-                        ? new Date(cur.timestamp).getTime()
-                        : Number.NaN
-                if (Number.isNaN(tbest) && !Number.isNaN(tcur)) return cur
-                if (!Number.isNaN(tbest) && Number.isNaN(tcur)) return best
-                return tcur > tbest ? cur : best
-            } catch (e) {
-                return best
-            }
-        }, readings[0])
-    }, [readings])
-
-    // When readings are available, classify the latest reading via POST /predict
-    useEffect(() => {
-        if (!latestReading) {
-            setClassification(null)
-            return
-        }
-
-        const token = localStorage.getItem('access_token')
-
-        const payload = {
-            Air_temperature:
-                latestReading.air_temperature ??
-                latestReading.process_temperature ??
-                0,
-            Process_temperature:
-                latestReading.process_temperature ??
-                latestReading.air_temperature ??
-                0,
-            Rotational_speed: latestReading.rotational_speed ?? 0,
-            Torque: latestReading.torque ?? 0,
-            Tool_wear: latestReading.tool_wear ?? 0,
-            Type: (latestReading.machine_type ?? latestReading.machine_id)
-                ?.toString()
-                ?.startsWith('H')
-                ? 'H'
-                : 'M',
-        }
-
-        const predictUrl = `${API_BASE}/predict`
-
-        fetch(predictUrl, {
-            method: 'POST',
-            headers: {
+        setError(null)
+        
+        try {
+            const token = localStorage.getItem('access_token')
+            const headers = { 
                 'Content-Type': 'application/json',
-                Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify(payload),
-        })
-            .then(async (res) => {
-                const txt = await res.text()
-                if (!res.ok)
-                    throw new Error(`${res.status} ${res.statusText} ${txt}`)
-                try {
-                    return JSON.parse(txt)
-                } catch {
-                    throw new Error(
-                        'Invalid JSON from predict: ' + txt.slice(0, 500)
-                    )
-                }
-            })
-            .then((data) => {
-                // Prefer fleetStatus label if available to stay consistent with FleetOverview
-                if (fleetStatus && fleetStatus.prediction_label) {
-                    setClassification({
-                        ...data,
-                        prediction_label: fleetStatus.prediction_label,
-                        prediction_numeric: fleetStatus.prediction_numeric,
-                        probabilities:
-                            fleetStatus.probabilities ?? data.probabilities,
-                    })
-                } else {
-                    setClassification(data)
-                }
-            })
-            .catch((err: any) => {
-                // keep classification null but show error in UI if needed
-                setClassification({ error: String(err) })
-            })
-    }, [latestReading, API_BASE, fleetStatus, machineId])
-
-    // prepare combined chart data: observed (db) + forecast series
-    const chartData = React.useMemo(() => {
-        const obs = Array.isArray(readings) ? [...readings] : []
-        const fcd = Array.isArray(forecast) ? [...forecast] : []
-
-        // sort ascending by timestamp (both arrays)
-        const sortByTime = (a: any, b: any) => {
-            const ta = a.timestamp
-                ? new Date(a.timestamp).getTime()
-                : Number.NaN
-            const tb = b.timestamp
-                ? new Date(b.timestamp).getTime()
-                : Number.NaN
-            if (Number.isNaN(ta) || Number.isNaN(tb)) return 0
-            return ta - tb
-        }
-
-        obs.sort(sortByTime)
-        fcd.sort(sortByTime)
-
-        // Determine the last observed timestamp to anchor forecast continuity
-        const lastObsTimeMs = (() => {
-            for (let i = obs.length - 1; i >= 0; i -= 1) {
-                const t = obs[i]?.timestamp
-                const ms = t ? new Date(t).getTime() : Number.NaN
-                if (!Number.isNaN(ms)) return ms
+                ...(token ? { Authorization: `Bearer ${token}` } : {}) 
             }
-            return Number.NaN
-        })()
 
-        const obsMapped = obs.map((r: any, idx: number) => ({
-            time:
-                r.timestamp && !Number.isNaN(new Date(r.timestamp).getTime())
-                    ? new Date(r.timestamp).toLocaleString()
-                    : String(idx + 1),
-            observed_process_temperature: r.process_temperature ?? null,
-            observed_torque: r.torque ?? null,
-            observed_air_temperature: r.air_temperature ?? null,
-            observed_tool_wear: r.tool_wear ?? null,
-            observed_rotational_speed: r.rotational_speed ?? null,
+            const [timelineRes, statusRes] = await Promise.all([
+                fetch(`${API_BASE}/timeline?limit=50&forecast_minutes=100`, { headers }),
+                fetch(`${API_BASE}/machine-status`, { headers })
+            ])
+
+            if (!timelineRes.ok) throw new Error('Gagal mengambil data timeline')
+            
+            const timelineData: TimelineResponse = await timelineRes.json()
+            
+            let historical = timelineData.last_readings || []
+            if (historical.length > 0 && historical[0].machine_id) {
+                historical = historical.filter(r => r.machine_id === machineId)
+            }
+            if (historical.length === 0) {
+                const readingsRes = await fetch(`${API_BASE}/readings?machine_id=${machineId}&limit=50`, { headers })
+                if (readingsRes.ok) {
+                    const readingsData = await readingsRes.json()
+                    historical = readingsData.readings || []
+                }
+            }
+            historical.sort((a, b) => new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime())
+            setReadings(historical)
+
+            const rawForecast = timelineData.forecast_data || []
+            let lastTime = historical.length > 0 
+                ? new Date(historical[historical.length - 1].timestamp!).getTime()
+                : Date.now()
+
+            const processedForecast = rawForecast.map((item) => {
+                lastTime += 60000 
+                return {
+                    ...item,
+                    timestamp: new Date(lastTime).toISOString(),
+                    machine_id: machineId,
+                    air_temperature: item.air_temperature ?? 0,
+                    process_temperature: item.process_temperature ?? 0,
+                    rotational_speed: item.rotational_speed ?? 0,
+                    torque: item.torque ?? 0,
+                    tool_wear: item.tool_wear ?? 0
+                }
+            })
+            setForecast(processedForecast)
+
+            if (statusRes.ok) {
+                const statusData: MachineStatusResponse = await statusRes.json()
+                const currentMachine = statusData.machines.find(m => m.machine_id === machineId)
+                
+                if (currentMachine) {
+                    setClassification({
+                        prediction_label: currentMachine.prediction,
+                        probabilities: currentMachine.confidence,
+                        prediction_numeric: currentMachine.prediction === 'No Failure' ? 0 : 1
+                    })
+                    setLastUpdated(currentMachine.last_updated)
+                }
+            }
+
+        } catch (err: any) {
+            console.error(err)
+            setError(err.message || 'Terjadi kesalahan saat memuat data')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        fetchData()
+    }, [machineId])
+
+    const latest = readings.length > 0 ? readings[readings.length - 1] : null
+
+    const healthScore = useMemo(() => {
+        if (!classification) return 0
+        const maxConf = Math.max(...classification.probabilities)
+        if (classification.prediction_label === 'No Failure') {
+            return Math.round(maxConf * 100)
+        } else {
+            return Math.round((1 - maxConf) * 100)
+        }
+    }, [classification])
+
+    const powerUsage = useMemo(() => {
+        if (!latest) return 0
+        const p = (latest.torque * latest.rotational_speed) / 9550
+        return p.toFixed(2)
+    }, [latest])
+
+    const efficiency = useMemo(() => {
+        if (!latest) return 0
+        const diff = latest.process_temperature - latest.air_temperature
+        let eff = 100 - Math.max(0, (diff - 8)) 
+        return Math.min(100, Math.max(0, Math.round(eff)))
+    }, [latest])
+
+    const chartData = useMemo(() => {
+        const histMapped = readings.map(r => ({
+            time: new Date(r.timestamp!).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            obs_process: r.process_temperature,
+            obs_air: r.air_temperature,
+            obs_torque: r.torque,
+            obs_rpm: r.rotational_speed,
+            obs_wear: r.tool_wear,
         }))
 
-        const fcdMapped = fcd.map((r: any, idx: number) => ({
-            time: (() => {
-                const forecastMs = r.timestamp
-                    ? new Date(r.timestamp).getTime()
-                    : Number.NaN
-                if (!Number.isNaN(forecastMs)) {
-                    return new Date(forecastMs).toLocaleString()
-                }
-                if (!Number.isNaN(lastObsTimeMs)) {
-                    const t = lastObsTimeMs + (idx + 1) * 60 * 1000
-                    return new Date(t).toLocaleString()
-                }
-                return String(obs.length + idx + 1)
-            })(),
-            forecast_process_temperature: r.process_temperature ?? null,
-            forecast_torque: r.torque ?? null,
-            forecast_air_temperature: r.air_temperature ?? null,
-            forecast_tool_wear: r.tool_wear ?? null,
-            forecast_rotational_speed: r.rotational_speed ?? null,
+        const foreMapped = forecast.map(r => ({
+            time: new Date(r.timestamp!).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            fc_process: r.process_temperature,
+            fc_air: r.air_temperature,
+            fc_torque: r.torque,
+            fc_rpm: r.rotational_speed,
+            fc_wear: r.tool_wear,
         }))
 
-        // combine: observed first, forecast appended (times already made continuous)
-        return [...obsMapped, ...fcdMapped]
+        return [...histMapped, ...foreMapped]
     }, [readings, forecast])
 
-    // Calculate dynamic Y-axis domains from observed + forecast data
-    const yAxisDomains = React.useMemo(() => {
-        const allData = [...(readings || []), ...(forecast || [])]
-
-        const calcDomain = (field: string) => {
-            const values = allData
-                .map((d: any) => d[field])
-                .filter((v: any) => v != null && !isNaN(v))
-            if (values.length === 0) return undefined
-            const min = Math.min(...values)
-            const max = Math.max(...values)
-            const padding = (max - min) * 0.1 || 1
-            return [Math.floor(min - padding), Math.ceil(max + padding)]
-        }
-
-        return {
-            process_temperature: calcDomain('process_temperature'),
-            torque: calcDomain('torque'),
-            air_temperature: calcDomain('air_temperature'),
-            tool_wear: calcDomain('tool_wear'),
-            rotational_speed: calcDomain('rotational_speed'),
-        }
-    }, [readings, forecast])
+    const getDomain = (keys: string[]) => {
+        const values: number[] = []
+        readings.forEach(r => keys.forEach(k => values.push(r[k as keyof SensorData] as number)))
+        forecast.forEach(r => keys.forEach(k => values.push(r[k as keyof SensorData] as number)))
+        
+        if (values.length === 0) return ['auto', 'auto']
+        const min = Math.min(...values)
+        const max = Math.max(...values)
+        const padding = (max - min) * 0.1
+        return [Math.floor(min - padding), Math.ceil(max + padding)]
+    }
 
     return (
-        <div className='p-6'>
-            <div className='mb-4'>
-                <button
-                    onClick={() => navigate(-1)}
-                    className='inline-flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm cursor-pointer'
-                    aria-label='Back'
-                >
-                    <ArrowLeft className='w-4 h-4' />
-                    <span className='text-sm font-medium'>Back</span>
-                </button>
-            </div>
-
-            <h1 className='text-2xl font-semibold mb-4'>
-                Machine Detail — {machineId}
-            </h1>
-
-            {/* Classification result for latest reading */}
-            <div className='mb-4'>
-                {classification ? (
-                    classification.error ? (
-                        <div className='p-3 bg-yellow-50 border rounded text-sm text-red-600'>
-                            Classification error: {classification.error}
-                        </div>
-                    ) : (
-                        <div className='p-3 bg-white border rounded'>
-                            <div className='flex items-center justify-between'>
-                                <div>
-                                    <div className='text-sm text-slate-500'>
-                                        Latest classification
-                                    </div>
-                                    <div className='text-lg font-semibold'>
-                                        {classification.prediction_label ??
-                                            classification.label ??
-                                            'N/A'}
-                                    </div>
-                                    <div className='text-xs text-slate-600'>
-                                        Code:{' '}
-                                        {classification.prediction_numeric ??
-                                            classification.code ??
-                                            'N/A'}
-                                    </div>
-                                </div>
-                                <div className='text-right'>
-                                    {classification.probabilities ? (
-                                        <div className='text-xs'>
-                                            Probabilities:
-                                            <div className='mt-1 text-xs text-slate-600'>
-                                                {classification.probabilities
-                                                    .map(
-                                                        (
-                                                            p: number,
-                                                            i: number
-                                                        ) =>
-                                                            `C${i}: ${p.toFixed(
-                                                                2
-                                                            )}`
-                                                    )
-                                                    .join(' · ')}
-                                            </div>
-                                        </div>
-                                    ) : null}
-                                </div>
-                            </div>
-                        </div>
-                    )
-                ) : (
-                    <div className='p-3 bg-gray-50 border rounded text-sm text-slate-600'>
-                        Classification: waiting for latest reading...
+        <div className='p-6 max-w-7xl mx-auto space-y-6'>
+            <div className='flex justify-between items-center'>
+                <div className='flex items-center gap-4'>
+                    <button
+                        onClick={() => navigate(-1)}
+                        className='p-2 rounded-full hover:bg-slate-100 transition-colors'
+                        title='Kembali'
+                    >
+                        <ArrowLeft className='w-6 h-6 text-slate-600' />
+                    </button>
+                    <div>
+                        <h1 className='text-2xl font-bold text-slate-900'>
+                            Detail Mesin: {machineId}
+                        </h1>
+                        <p className='text-slate-500 text-sm'>
+                            Pemantauan Real-time & Prediksi AI
+                        </p>
                     </div>
-                )}
+                </div>
+                <Button variant="outline" onClick={fetchData} disabled={loading}>
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </Button>
             </div>
 
-            {latestReading && (
-                <div className='mb-6'>
-                    <h3 className='text-sm text-slate-500 mb-2'>
-                        Latest sensor snapshot
+            {error && (
+                <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5" />
+                    {error}
+                </div>
+            )}
+
+            <div>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                    Machine Statistics
+                </h3>
+                <div className="grid grid-cols-5 gap-4">
+                    <CardItem 
+                        icon={<Clock className="w-5 h-5 text-blue-600" />}
+                        label="Operations Hours"
+                        value="1,240 Jam" 
+                        subtext="Since last service"
+                    />
+                    <CardItem 
+                        icon={<TrendingUp className="w-5 h-5 text-green-600" />}
+                        label="Efisiensi"
+                        value={`${efficiency}%`}
+                        subtext="Optimal"
+                    />
+                    <CardItem 
+                        icon={<Activity className={`w-5 h-5 ${healthScore > 80 ? 'text-green-600' : 'text-red-600'}`} />}
+                        label="Health Score"
+                        value={`${healthScore}/100`}
+                        subtext={classification?.prediction_label}
+                        highlight={healthScore < 70}
+                    />
+                    <CardItem 
+                        icon={<Zap className="w-5 h-5 text-yellow-600" />}
+                        label="Power Usage"
+                        value={`${powerUsage} kW`}
+                        subtext="Calculated Load"
+                    />
+                    <CardItem 
+                        icon={<Calendar className="w-5 h-5 text-slate-600" />}
+                        label="Last Maintenance"
+                        value={lastUpdated !== '-' ? new Date(lastUpdated).toLocaleDateString() : '-'}
+                        subtext="Check Log"
+                    />
+                    
+                    <CardItem 
+                        label="Air Temperature"
+                        value={latest?.air_temperature ?? '-'}
+                        unit=" K"
+                        subtext="Ambient"
+                    />
+                    <CardItem 
+                        label="Process Temp"
+                        value={latest?.process_temperature ?? '-'}
+                        unit=" K"
+                        subtext="Operational"
+                    />
+                    <CardItem 
+                        label="Rotational Speed"
+                        value={latest?.rotational_speed ?? '-'}
+                        unit=" RPM"
+                        subtext="Motor Speed"
+                    />
+                    <CardItem 
+                        label="Torque"
+                        value={latest?.torque ?? '-'}
+                        unit=" Nm"
+                        subtext="Force"
+                    />
+                    <CardItem 
+                        label="Tool Wear"
+                        value={latest?.tool_wear ?? '-'}
+                        unit=" Min"
+                        subtext="Cumulative"
+                        highlight={(latest?.tool_wear || 0) > 200}
+                    />
+                </div>
+            </div>
+
+            {readings.length > 0 && (
+                <div className='space-y-6'>
+                    <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
+                        Grafik Analisis
                     </h3>
-                    <div className='grid grid-cols-2 md:grid-cols-5 gap-3'>
-                        <div className='bg-white border rounded p-3'>
-                            <div className='text-xs text-slate-500 mb-1'>
-                                Process Temperature
-                            </div>
-                            <div className='text-lg font-semibold text-slate-800'>
-                                {latestReading.process_temperature ?? 'N/A'}
-                            </div>
-                        </div>
-                        <div className='bg-white border rounded p-3'>
-                            <div className='text-xs text-slate-500 mb-1'>
-                                Air Temperature
-                            </div>
-                            <div className='text-lg font-semibold text-slate-800'>
-                                {latestReading.air_temperature ?? 'N/A'}
-                            </div>
-                        </div>
-                        <div className='bg-white border rounded p-3'>
-                            <div className='text-xs text-slate-500 mb-1'>
-                                Torque
-                            </div>
-                            <div className='text-lg font-semibold text-slate-800'>
-                                {latestReading.torque ?? 'N/A'}
-                            </div>
-                        </div>
-                        <div className='bg-white border rounded p-3'>
-                            <div className='text-xs text-slate-500 mb-1'>
-                                Rotational Speed
-                            </div>
-                            <div className='text-lg font-semibold text-slate-800'>
-                                {latestReading.rotational_speed ?? 'N/A'}
-                            </div>
-                        </div>
-                        <div className='bg-white border rounded p-3'>
-                            <div className='text-xs text-slate-500 mb-1'>
-                                Tool Wear
-                            </div>
-                            <div className='text-lg font-semibold text-slate-800'>
-                                {latestReading.tool_wear ?? 'N/A'}
-                            </div>
-                        </div>
+
+                    <ChartSection title="Process Temperature Analysis">
+                        <ResponsiveContainer width='100%' height={250}>
+                            <LineChart data={chartData}>
+                                <CartesianGrid strokeDasharray='3 3' stroke='#e2e8f0' />
+                                <XAxis dataKey='time' fontSize={12} />
+                                <YAxis domain={getDomain(['obs_process', 'fc_process'])} fontSize={12} />
+                                <Tooltip />
+                                <Legend />
+                                <Line type='monotone' dataKey='obs_process' name='Observed' stroke='#2563eb' strokeWidth={2} dot={false} />
+                                <Line type='monotone' dataKey='fc_process' name='Forecast' stroke='#93c5fd' strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </ChartSection>
+
+                    <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+                        <ChartSection title="Torque Dynamics">
+                            <ResponsiveContainer width='100%' height={200}>
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis dataKey='time' fontSize={10} />
+                                    <YAxis domain={getDomain(['obs_torque'])} fontSize={10} />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line type='monotone' dataKey='obs_torque' name='Torque' stroke='#d97706' strokeWidth={2} dot={false} />
+                                    <Line type='monotone' dataKey='fc_torque' name='Forecast' stroke='#fcd34d' strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartSection>
+
+                        <ChartSection title="Air Temperature">
+                            <ResponsiveContainer width='100%' height={200}>
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis dataKey='time' fontSize={10} />
+                                    <YAxis domain={getDomain(['obs_air'])} fontSize={10} />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line type='monotone' dataKey='obs_air' name='Air Temp' stroke='#16a34a' strokeWidth={2} dot={false} />
+                                    <Line type='monotone' dataKey='fc_air' name='Forecast' stroke='#86efac' strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartSection>
+
+                        <ChartSection title="Tool Wear Status">
+                            <ResponsiveContainer width='100%' height={200}>
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis dataKey='time' fontSize={10} />
+                                    <YAxis domain={getDomain(['obs_wear'])} fontSize={10} />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line type='monotone' dataKey='obs_wear' name='Wear (Min)' stroke='#dc2626' strokeWidth={2} dot={false} />
+                                    <Line type='monotone' dataKey='fc_wear' name='Forecast' stroke='#fca5a5' strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartSection>
+
+                        <ChartSection title="Rotational Speed (RPM)">
+                            <ResponsiveContainer width='100%' height={200}>
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis dataKey='time' fontSize={10} />
+                                    <YAxis domain={getDomain(['obs_rpm'])} fontSize={10} />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line type='monotone' dataKey='obs_rpm' name='RPM' stroke='#9333ea' strokeWidth={2} dot={false} />
+                                    <Line type='monotone' dataKey='fc_rpm' name='Forecast' stroke='#d8b4fe' strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartSection>
+                        
+                         <ChartSection title="Maintenance History">
+                            <ResponsiveContainer width='100%' height={200}>
+                                <BarChart data={maintenanceHistory}>
+                                    <CartesianGrid strokeDasharray='3 3' />
+                                    <XAxis dataKey='month' fontSize={10} />
+                                    <YAxis fontSize={10} />
+                                    <Tooltip />
+                                    <Bar dataKey='count' fill='#475569' name='Intervention' radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </ChartSection>
                     </div>
                 </div>
             )}
+        </div>
+    )
+}
 
-            {loading && <div>Loading readings...</div>}
-            {error && <div className='text-red-600'>Error: {error}</div>}
-
-            {!loading && !error && chartData.length > 0 && (
-                <div>
-                    <p className='mb-2'>
-                        Showing up to 50 observed readings and 100 forecast
-                        points (actual returned:{' '}
-                        {readings ? readings.length : 0} observed,{' '}
-                        {forecast ? forecast.length : 0} forecast).
-                    </p>
-
-                    <div className='grid gap-6'>
-                        {/* Process Temperature */}
-                        <div className='bg-white border rounded p-3'>
-                            <h3 className='font-medium mb-2'>
-                                Process Temperature
-                            </h3>
-                            <ResponsiveContainer
-                                width='100%'
-                                height={200}
-                            >
-                                <LineChart data={chartData}>
-                                    <CartesianGrid strokeDasharray='3 3' />
-                                    <XAxis
-                                        dataKey='time'
-                                        minTickGap={20}
-                                    />
-                                    <YAxis
-                                        domain={
-                                            yAxisDomains.process_temperature
-                                        }
-                                    />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='observed_process_temperature'
-                                        name='Observed'
-                                        stroke='#ef4444'
-                                        dot={false}
-                                    />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='forecast_process_temperature'
-                                        name='Forecast'
-                                        stroke='#f97316'
-                                        dot={false}
-                                        strokeDasharray='4 4'
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Torque */}
-                        <div className='bg-white border rounded p-3'>
-                            <h3 className='font-medium mb-2'>Torque</h3>
-                            <ResponsiveContainer
-                                width='100%'
-                                height={200}
-                            >
-                                <LineChart data={chartData}>
-                                    <CartesianGrid strokeDasharray='3 3' />
-                                    <XAxis
-                                        dataKey='time'
-                                        minTickGap={20}
-                                    />
-                                    <YAxis domain={yAxisDomains.torque} />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='observed_torque'
-                                        name='Observed'
-                                        stroke='#06b6d4'
-                                        dot={false}
-                                    />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='forecast_torque'
-                                        name='Forecast'
-                                        stroke='#0891b2'
-                                        dot={false}
-                                        strokeDasharray='4 4'
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Air Temperature */}
-                        <div className='bg-white border rounded p-3'>
-                            <h3 className='font-medium mb-2'>
-                                Air Temperature
-                            </h3>
-                            <ResponsiveContainer
-                                width='100%'
-                                height={200}
-                            >
-                                <LineChart data={chartData}>
-                                    <CartesianGrid strokeDasharray='3 3' />
-                                    <XAxis
-                                        dataKey='time'
-                                        minTickGap={20}
-                                    />
-                                    <YAxis
-                                        domain={yAxisDomains.air_temperature}
-                                    />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='observed_air_temperature'
-                                        name='Observed'
-                                        stroke='#f59e0b'
-                                        dot={false}
-                                    />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='forecast_air_temperature'
-                                        name='Forecast'
-                                        stroke='#d97706'
-                                        dot={false}
-                                        strokeDasharray='4 4'
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Tool Wear */}
-                        <div className='bg-white border rounded p-3'>
-                            <h3 className='font-medium mb-2'>Tool Wear</h3>
-                            <ResponsiveContainer
-                                width='100%'
-                                height={200}
-                            >
-                                <LineChart data={chartData}>
-                                    <CartesianGrid strokeDasharray='3 3' />
-                                    <XAxis
-                                        dataKey='time'
-                                        minTickGap={20}
-                                    />
-                                    <YAxis domain={yAxisDomains.tool_wear} />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='observed_tool_wear'
-                                        name='Observed'
-                                        stroke='#7c3aed'
-                                        dot={false}
-                                    />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='forecast_tool_wear'
-                                        name='Forecast'
-                                        stroke='#a78bfa'
-                                        dot={false}
-                                        strokeDasharray='4 4'
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Rotational Speed */}
-                        <div className='bg-white border rounded p-3'>
-                            <h3 className='font-medium mb-2'>
-                                Rotational Speed
-                            </h3>
-                            <ResponsiveContainer
-                                width='100%'
-                                height={200}
-                            >
-                                <LineChart data={chartData}>
-                                    <CartesianGrid strokeDasharray='3 3' />
-                                    <XAxis
-                                        dataKey='time'
-                                        minTickGap={20}
-                                    />
-                                    <YAxis
-                                        domain={yAxisDomains.rotational_speed}
-                                    />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='observed_rotational_speed'
-                                        name='Observed'
-                                        stroke='#16a34a'
-                                        dot={false}
-                                    />
-                                    <Line
-                                        type='monotone'
-                                        dataKey='forecast_rotational_speed'
-                                        name='Forecast'
-                                        stroke='#22c55e'
-                                        dot={false}
-                                        strokeDasharray='4 4'
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Maintenance History */}
-            <div className='mt-6 bg-white border rounded p-4'>
-                <h3 className='font-medium mb-4'>Maintenance History</h3>
-                <ResponsiveContainer
-                    width='100%'
-                    height={250}
-                >
-                    <BarChart data={maintenanceHistory}>
-                        <CartesianGrid strokeDasharray='3 3' />
-                        <XAxis dataKey='month' />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Bar
-                            dataKey='count'
-                            fill='#3b82f6'
-                            name='Maintenance Count'
-                        />
-                    </BarChart>
-                </ResponsiveContainer>
+function CardItem({ 
+    label, value, subtext, icon, unit = '', highlight = false 
+}: { 
+    label: string, value: string | number, subtext?: string, icon?: React.ReactNode, unit?: string, highlight?: boolean 
+}) {
+    return (
+        <div className={`p-4 bg-white rounded-xl border shadow-sm transition-all hover:shadow-md ${highlight ? 'border-red-200 bg-red-50' : 'border-slate-200'}`}>
+            <div className="flex justify-between items-start mb-2">
+                <span className="text-xs font-medium text-slate-500 uppercase">{label}</span>
+                {icon}
             </div>
+            <div className={`text-xl font-bold ${highlight ? 'text-red-700' : 'text-slate-900'}`}>
+                {value}<span className="text-sm font-normal text-slate-500 ml-1">{unit}</span>
+            </div>
+            {subtext && <div className="text-xs text-slate-400 mt-1">{subtext}</div>}
+        </div>
+    )
+}
 
-            {!loading && !error && chartData.length === 0 && (
-                <div>No readings returned.</div>
-            )}
+function ChartSection({ title, children }: { title: string, children: React.ReactNode }) {
+    return (
+        <div className='bg-white p-4 rounded-xl border border-slate-200 shadow-sm'>
+            <h4 className='font-bold text-slate-700 mb-4 text-sm'>{title}</h4>
+            {children}
         </div>
     )
 }
