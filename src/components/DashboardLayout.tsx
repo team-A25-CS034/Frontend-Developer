@@ -1,29 +1,27 @@
-import { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutGrid, 
-  Bell, 
-  FileText, 
-  User, 
-  Building2,
-  Bot,
-} from 'lucide-react';
-import NotificationBell from './NotificationBell';
+import { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { LayoutGrid, Bell, FileText, User, Building2, Bot, Upload } from "lucide-react";
+import NotificationBell from "./NotificationBell";
 // keep styling consistent with nav items for Copilot
-import { Avatar, AvatarFallback } from './ui/avatar';
+import { Avatar, AvatarFallback } from "./ui/avatar";
 
 interface DashboardLayoutProps {
   children: ReactNode;
   onOpenCopilot?: () => void;
+  onOpenUpload?: () => void;
 }
 
-export default function DashboardLayout({ children, onOpenCopilot }: DashboardLayoutProps) {
+export default function DashboardLayout({
+  children,
+  onOpenCopilot,
+  onOpenUpload
+}: DashboardLayoutProps) {
   const location = useLocation();
 
   const navigation = [
-    { name: 'Fleet', href: '/fleet', icon: LayoutGrid },
-    { name: 'Tickets', href: '/tickets', icon: FileText },
-    { name: 'Profile', href: '/profile', icon: User },
+    { name: "Fleet", href: "/fleet", icon: LayoutGrid },
+    { name: "Tickets", href: "/tickets", icon: FileText },
+    { name: "Profile", href: "/profile", icon: User },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -55,25 +53,36 @@ export default function DashboardLayout({ children, onOpenCopilot }: DashboardLa
                   to={item.href}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive(item.href)
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{item.name}</span>
                 </Link>
-                {item.name === 'Tickets' && (
-                  // Render Copilot as a nav-style item (same classes as links)
-                  <div className="mt-3">
-                    <button
-                      type="button"
-                      onClick={() => onOpenCopilot && onOpenCopilot()}
-                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
-                    >
-                      <Bot className="w-4 h-4" />
-                      <span>Ask Copilot</span>
-                    </button>
-                  </div>
+                {item.name === "Tickets" && (
+                  <>
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => onOpenCopilot && onOpenCopilot()}
+                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
+                      >
+                        <Bot className="w-4 h-4" />
+                        <span>Ask Copilot</span>
+                      </button>
+                    </div>
+                    <div className="mt-1">
+                      <button
+                        type="button"
+                        onClick={() => onOpenUpload && onOpenUpload()}
+                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-slate-800 hover:text-white text-left"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Data</span>
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             );
@@ -86,9 +95,10 @@ export default function DashboardLayout({ children, onOpenCopilot }: DashboardLa
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
           <h1 className="text-slate-900">
-            {navigation.find(item => isActive(item.href))?.name || 'Dashboard'}
+            {navigation.find((item) => isActive(item.href))?.name ||
+              "Dashboard"}
           </h1>
-          
+
           <div className="flex items-center gap-4">
             <NotificationBell />
             <Avatar>
@@ -100,9 +110,7 @@ export default function DashboardLayout({ children, onOpenCopilot }: DashboardLa
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
+        <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>
   );
