@@ -6,6 +6,7 @@ import {
     AlertTriangle,
     CheckCircle,
     Eye,
+    RefreshCw,
 } from 'lucide-react'
 import { Input } from './ui/input'
 import { Button } from './ui/button'
@@ -26,41 +27,32 @@ import {
     TableRow,
 } from './ui/table'
 
-// Default mock data for fallback
+interface MachineAPIResponse {
+    machine_id: string
+    status: string
+    prediction: string
+    confidence: number[]
+    last_updated: string
+}
+
 const defaultMachines = [
     {
         id: 'M001',
         name: 'Pump Station A-12',
         status: 'Normal',
-        failureType: 'Unknown',
+        failureType: 'No Failure',
         riskScore: 12,
         location: 'Building A, Floor 2',
         lastMaintenance: '2025-10-15',
-    },
-    {
-        id: 'M002',
-        name: 'Compressor B-04',
-        status: 'Watch',
-        failureType: 'Unknown',
-        riskScore: 58,
-        location: 'Building B, Floor 1',
-        lastMaintenance: '2025-09-20',
-    },
-    {
-        id: 'M003',
-        name: 'Motor Drive C-33',
-        status: 'Risk',
-        failureType: 'Unknown',
-        riskScore: 87,
-        location: 'Building C, Floor 3',
-        lastMaintenance: '2025-08-10',
-    },
+    }
 ]
 
 export default function FleetOverview() {
     const navigate = useNavigate()
+
     const API_BASE =
         (import.meta as any)?.env?.VITE_API_BASE_URL ?? 'http://localhost:8000'
+
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [sortBy, setSortBy] = useState<string | null>(null)
@@ -68,54 +60,74 @@ export default function FleetOverview() {
     const [machines, setMachines] = useState(defaultMachines)
     const [loading, setLoading] = useState(true)
 
-    useEffect(() => {
-        const fetchMachineIds = async () => {
-            try {
-                // Get token from localStorage
-                const token = localStorage.getItem('access_token')
-                if (!token) {
-                    console.error('No access token found')
-                    setLoading(false)
-                    return
-                }
+    const fetchMachineStatus = async () => {
+        setLoading(true)
+        try {
+            const token = localStorage.getItem('access_token')
+            if (!token) {
+                console.error('No access token found')
+                setLoading(false)
+                return
+            }
 
-                const response = await fetch(`${API_BASE}/machine-status`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                })
+            const response = await fetch(`${API_BASE}/machine-status`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
 
-                if (response.ok) {
-                    const data = await response.json()
-                    const machinesResp = data?.machines ?? []
-                    if (Array.isArray(machinesResp)) {
-                        const machineList = machinesResp.map((m: any) => {
-                            const label = m.prediction_label ?? 'Unknown'
-                            const status =
-                                label === 'No Failure' ? 'Normal' : 'Risk'
-                            return {
-                                id: m.machine_id ?? 'Unknown',
-                                name: `Machine ${m.machine_id ?? 'Unknown'}`,
-                                status,
-                                failureType: label,
-                                riskScore: Math.floor(Math.random() * 100),
-                                location: 'TBD',
-                                lastMaintenance: '2025-12-01',
-                            }
-                        })
+            if (response.ok) {
+                const data = await response.json()
+                const machinesResp = data?.machines ?? []
+
+                if (Array.isArray(machinesResp)) {
+                    const machineList = machinesResp.map((m: MachineAPIResponse) => {
+                        const isNormal = m.prediction === 'No Failure'
+
+                        const uiStatus = isNormal ? 'Normal' : 'Risk'
+
+                        const calculatedRisk = isNormal
+                            ? Math.floor((1 - (m.confidence[0] || 0.9)) * 100) 
+                            : Math.floor((Math.max(...m.confidence.slice(1)) || 0.8) * 100)
+
+                        const formattedName = m.machine_id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+
+                        return {
+                            id: m.machine_id,
+                            name: formattedName,
+                            status: uiStatus,
+                            failureType: m.prediction,
+                            riskScore: Math.max(0, Math.min(100, calculatedRisk)), 
+                            location: 'Factory Floor 1', 
+                            lastMaintenance: new Date(m.last_updated).toLocaleDateString('id-ID', {
+                                day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                            }),
+                        }
+                    })
+
+                    if (machineList.length > 0) {
                         setMachines(machineList)
                     }
-                } else {
-                    console.error('Failed to fetch machine IDs')
                 }
-            } catch (error) {
-                console.error('Error fetching machine IDs:', error)
-            } finally {
-                setLoading(false)
+            } else {
+                console.error('Failed to fetch machine status')
+                if (response.status === 401) {
+                    localStorage.removeItem('access_token')
+                    navigate('/login')
+                }
             }
+        } catch (error) {
+            console.error('Error fetching machine status:', error)
+        } finally {
+            setLoading(false)
         }
+    }
 
-        fetchMachineIds()
+    useEffect(() => {
+        fetchMachineStatus()
+
+        const interval = setInterval(fetchMachineStatus, 30000)
+        return () => clearInterval(interval)
     }, [])
 
     const getStatusColor = (status: string) => {
@@ -144,8 +156,8 @@ export default function FleetOverview() {
     }
 
     const getRiskColor = (score: number) => {
-        if (score >= 70) return 'text-red-600'
-        if (score >= 50) return 'text-yellow-600'
+        if (score >= 70) return 'text-red-600 font-bold'
+        if (score >= 30) return 'text-yellow-600 font-medium'
         return 'text-green-600'
     }
 
@@ -171,27 +183,12 @@ export default function FleetOverview() {
         let va: any = (a as any)[sortBy]
         let vb: any = (b as any)[sortBy]
 
-        // special handling for machine ID: sort by numeric suffix when present (machine_01 -> 1)
         if (sortBy === 'id') {
             const numA = String(va).match(/(\d+)$/)?.[1]
             const numB = String(vb).match(/(\d+)$/)?.[1]
             if (numA && numB) {
-                const nA = Number(numA)
-                const nB = Number(numB)
-                return sortDir === 'asc' ? nA - nB : nB - nA
+                return sortDir === 'asc' ? Number(numA) - Number(numB) : Number(numB) - Number(numA)
             }
-            // fallback to string compare below if numeric suffix not present
-        }
-
-        // special handling for certain columns
-        if (sortBy === 'riskScore') {
-            va = Number(va)
-            vb = Number(vb)
-        }
-
-        if (sortBy === 'lastMaintenance') {
-            va = new Date(va).getTime()
-            vb = new Date(vb).getTime()
         }
 
         if (sortBy === 'status') {
@@ -199,24 +196,18 @@ export default function FleetOverview() {
             vb = statusOrder[vb] ?? 99
         }
 
-        // string compare (case-insensitive)
         if (typeof va === 'string' && typeof vb === 'string') {
-            const res = va.localeCompare(vb, undefined, { sensitivity: 'base' })
-            return sortDir === 'asc' ? res : -res
+            return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
         }
 
-        // numeric compare
         if (typeof va === 'number' && typeof vb === 'number') {
             return sortDir === 'asc' ? va - vb : vb - va
         }
 
-        // fallback
-        const res = String(va).localeCompare(String(vb))
-        return sortDir === 'asc' ? res : -res
+        return 0
     })
 
     const toggleSort = (column: string) => {
-        // Cycle: asc -> desc -> none -> asc
         if (sortBy === column) {
             if (sortDir === 'asc') setSortDir('desc')
             else if (sortDir === 'desc') {
@@ -238,36 +229,42 @@ export default function FleetOverview() {
 
     return (
         <div className='p-8'>
-            {/* Stats Cards */}
+            <div className='flex justify-between items-center mb-6'>
+                <h1 className="text-2xl font-bold text-slate-900">Fleet Overview</h1>
+                <Button variant="outline" size="sm" onClick={fetchMachineStatus} disabled={loading}>
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh Data
+                </Button>
+            </div>
+
             <div className='grid grid-cols-4 gap-6 mb-8'>
-                <div className='bg-white rounded-lg p-6 border border-slate-200'>
-                    <p className='text-slate-600'>Total Machines</p>
-                    <p className='text-slate-900 mt-2'>{stats.total}</p>
+                <div className='bg-white rounded-lg p-6 border border-slate-200 shadow-sm'>
+                    <p className='text-slate-600 text-sm font-medium'>Total Machines</p>
+                    <p className='text-slate-900 mt-2 text-3xl font-bold'>{stats.total}</p>
                 </div>
-                <div className='bg-white rounded-lg p-6 border border-slate-200'>
-                    <p className='text-slate-600'>Normal</p>
-                    <p className='text-green-600 mt-2'>{stats.normal}</p>
+                <div className='bg-white rounded-lg p-6 border border-slate-200 shadow-sm'>
+                    <p className='text-slate-600 text-sm font-medium'>Normal Operation</p>
+                    <p className='text-green-600 mt-2 text-3xl font-bold'>{stats.normal}</p>
                 </div>
-                <div className='bg-white rounded-lg p-6 border border-slate-200'>
-                    <p className='text-slate-600'>Watch</p>
-                    <p className='text-yellow-600 mt-2'>{stats.watch}</p>
+                <div className='bg-white rounded-lg p-6 border border-slate-200 shadow-sm'>
+                    <p className='text-slate-600 text-sm font-medium'>Watch List</p>
+                    <p className='text-yellow-600 mt-2 text-3xl font-bold'>{stats.watch}</p>
                 </div>
-                <div className='bg-white rounded-lg p-6 border border-slate-200'>
-                    <p className='text-slate-600'>At Risk</p>
-                    <p className='text-red-600 mt-2'>{stats.risk}</p>
+                <div className='bg-white rounded-lg p-6 border border-slate-200 shadow-sm'>
+                    <p className='text-slate-600 text-sm font-medium'>Critical Risk</p>
+                    <p className='text-red-600 mt-2 text-3xl font-bold'>{stats.risk}</p>
                 </div>
             </div>
 
-            {/* Filters */}
-            <div className='bg-white rounded-lg border border-slate-200 p-6 mb-6'>
-                <div className='flex gap-4 items-center'>
-                    <div className='flex-1 relative'>
-                        <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400' />
+            <div className='bg-white rounded-lg border border-slate-200 p-4 mb-6 shadow-sm'>
+                <div className='flex flex-row gap-4 items-center'>
+                    <div className='relative w-full'>
+                        <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
                         <Input
-                            placeholder='Search machines by name or ID...'
+                            placeholder='Search machines...'
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className='pl-10'
+                            className='pl-9'
                         />
                     </div>
 
@@ -275,7 +272,7 @@ export default function FleetOverview() {
                         value={statusFilter}
                         onValueChange={setStatusFilter}
                     >
-                        <SelectTrigger className='w-48'>
+                        <SelectTrigger className='w-full md:w-48'>
                             <SelectValue placeholder='Filter by status' />
                         </SelectTrigger>
                         <SelectContent>
@@ -288,171 +285,98 @@ export default function FleetOverview() {
                 </div>
             </div>
 
-            {/* Machines Table */}
-            <div className='bg-white rounded-lg border border-slate-200'>
+            <div className='bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden'>
                 <Table>
                     <TableHeader>
-                        <TableRow>
-                            <TableHead>
-                                <div className='flex items-center justify-between'>
-                                    <div className='flex items-center gap-2'>
-                                        <span>Machine ID</span>
-                                        {sortBy === 'id' &&
-                                            (sortDir === 'asc' ? (
-                                                <span>▲</span>
-                                            ) : (
-                                                <span>▼</span>
-                                            ))}
-                                    </div>
-                                    <button
-                                        type='button'
-                                        onClick={() => toggleSort('id')}
-                                        aria-label='Sort by Machine ID'
-                                        className='p-1 hover:bg-slate-100 rounded'
-                                    >
-                                        <AlignLeft className='w-4 h-4 text-slate-500' />
-                                    </button>
-                                </div>
+                        <TableRow className="bg-slate-50">
+                            <TableHead className="w-[150px]">
+                                <button onClick={() => toggleSort('id')} className="flex items-center gap-2 font-semibold text-slate-900">
+                                    Machine ID {sortBy === 'id' && (sortDir === 'asc' ? '▲' : '▼')}
+                                </button>
                             </TableHead>
                             <TableHead>
-                                <div className='flex items-center justify-between'>
-                                    <div className='flex items-center gap-2'>
-                                        <span>Machine Name</span>
-                                        {sortBy === 'name' &&
-                                            (sortDir === 'asc' ? (
-                                                <span>▲</span>
-                                            ) : (
-                                                <span>▼</span>
-                                            ))}
-                                    </div>
-                                    <button
-                                        type='button'
-                                        onClick={() => toggleSort('name')}
-                                        aria-label='Sort by Machine Name'
-                                        className='p-1 hover:bg-slate-100 rounded'
-                                    >
-                                        <AlignLeft className='w-4 h-4 text-slate-500' />
-                                    </button>
-                                </div>
+                                <button onClick={() => toggleSort('name')} className="flex items-center gap-2 font-semibold text-slate-900">
+                                    Name {sortBy === 'name' && (sortDir === 'asc' ? '▲' : '▼')}
+                                </button>
                             </TableHead>
                             <TableHead>
-                                <div className='flex items-center justify-between'>
-                                    <div className='flex items-center gap-2'>
-                                        <span>Status</span>
-                                        {sortBy === 'status' &&
-                                            (sortDir === 'asc' ? (
-                                                <span>▲</span>
-                                            ) : (
-                                                <span>▼</span>
-                                            ))}
-                                    </div>
-                                    <button
-                                        type='button'
-                                        onClick={() => toggleSort('status')}
-                                        aria-label='Sort by Status'
-                                        className='p-1 hover:bg-slate-100 rounded'
-                                    >
-                                        <AlignLeft className='w-4 h-4 text-slate-500' />
-                                    </button>
-                                </div>
+                                <button onClick={() => toggleSort('status')} className="flex items-center gap-2 font-semibold text-slate-900">
+                                    Status {sortBy === 'status' && (sortDir === 'asc' ? '▲' : '▼')}
+                                </button>
                             </TableHead>
-                            <TableHead>Failure Type</TableHead>
+                            <TableHead className="font-semibold text-slate-900">Diagnosis</TableHead>
                             <TableHead>
-                                <div className='flex items-center justify-between'>
-                                    <div className='flex items-center gap-2'>
-                                        <span>Risk Score</span>
-                                        {sortBy === 'riskScore' &&
-                                            (sortDir === 'asc' ? (
-                                                <span>▲</span>
-                                            ) : (
-                                                <span>▼</span>
-                                            ))}
-                                    </div>
-                                    <button
-                                        type='button'
-                                        onClick={() => toggleSort('riskScore')}
-                                        aria-label='Sort by Risk Score'
-                                        className='p-1 hover:bg-slate-100 rounded'
-                                    >
-                                        <AlignLeft className='w-4 h-4 text-slate-500' />
-                                    </button>
-                                </div>
+                                <button onClick={() => toggleSort('riskScore')} className="flex items-center gap-2 font-semibold text-slate-900">
+                                    Risk Score {sortBy === 'riskScore' && (sortDir === 'asc' ? '▲' : '▼')}
+                                </button>
                             </TableHead>
-                            <TableHead>
-                                <div className='flex items-center justify-between'>
-                                    <div className='flex items-center gap-2'>
-                                        <span>Last Maintenance</span>
-                                        {sortBy === 'lastMaintenance' &&
-                                            (sortDir === 'asc' ? (
-                                                <span>▲</span>
-                                            ) : (
-                                                <span>▼</span>
-                                            ))}
-                                    </div>
-                                    <button
-                                        type='button'
-                                        onClick={() =>
-                                            toggleSort('lastMaintenance')
-                                        }
-                                        aria-label='Sort by Last Maintenance'
-                                        className='p-1 hover:bg-slate-100 rounded'
-                                    >
-                                        <AlignLeft className='w-4 h-4 text-slate-500' />
-                                    </button>
-                                </div>
-                            </TableHead>
-                            <TableHead>Actions</TableHead>
+                            <TableHead className="font-semibold text-slate-900">Last Update</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {sortedMachines.map((machine) => (
-                            <TableRow key={machine.id}>
-                                <TableCell>{machine.id}</TableCell>
-                                <TableCell>{machine.name}</TableCell>
-                                <TableCell>
-                                    <Badge
-                                        variant='outline'
-                                        className={`flex items-center gap-1 w-fit ${getStatusColor(
-                                            machine.status
-                                        )}`}
-                                    >
-                                        {getStatusIcon(machine.status)}
-                                        {machine.status}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell>
-                                    {loading ? (
-                                        <span className='text-slate-400 text-sm'>
-                                            Loading...
-                                        </span>
-                                    ) : (
-                                        machine.failureType ?? 'Unknown'
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    <span
-                                        className={getRiskColor(
-                                            machine.riskScore
-                                        )}
-                                    >
-                                        {machine.riskScore}
-                                    </span>
-                                </TableCell>
-                                <TableCell>{machine.lastMaintenance}</TableCell>
-                                <TableCell>
-                                    <Button
-                                        variant='outline'
-                                        size='sm'
-                                        onClick={() =>
-                                            navigate(`/machine/${machine.id}`)
-                                        }
-                                    >
-                                        <Eye className='w-4 h-4 mr-2' />
-                                        View Details
-                                    </Button>
+                        {loading && machines.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                                    Loading fleet data...
                                 </TableCell>
                             </TableRow>
-                        ))}
+                        ) : sortedMachines.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                                    No machines found.
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            sortedMachines.map((machine) => (
+                                <TableRow key={machine.id} className="hover:bg-slate-50 transition-colors">
+                                    <TableCell className="font-medium">{machine.id}</TableCell>
+                                    <TableCell>{machine.name}</TableCell>
+                                    <TableCell>
+                                        <Badge
+                                            variant='outline'
+                                            className={`flex items-center gap-1 w-fit px-2 py-1 ${getStatusColor(
+                                                machine.status
+                                            )}`}
+                                        >
+                                            {getStatusIcon(machine.status)}
+                                            {machine.status}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className={machine.failureType !== 'No Failure' ? 'text-red-600 font-medium' : 'text-slate-600'}>
+                                            {machine.failureType}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <span className={getRiskColor(machine.riskScore)}>
+                                                {machine.riskScore}%
+                                            </span>
+                                            {/* Visual Bar for Risk */}
+                                            <div className="h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full ${machine.riskScore > 50 ? 'bg-red-500' : 'bg-green-500'}`}
+                                                    style={{ width: `${machine.riskScore}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-slate-500 text-sm">{machine.lastMaintenance}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button
+                                            variant='ghost'
+                                            size='sm'
+                                            onClick={() => navigate(`/machine/${machine.id}`)}
+                                            className="hover:bg-blue-50 hover:text-blue-600"
+                                        >
+                                            <Eye className='w-4 h-4 mr-2' />
+                                            Details
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        )}
                     </TableBody>
                 </Table>
             </div>

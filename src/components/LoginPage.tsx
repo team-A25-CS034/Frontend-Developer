@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
-import { Building2 } from 'lucide-react'
+import { Building2, AlertCircle, Loader2 } from 'lucide-react'
 
 interface LoginPageProps {
     onLogin: () => void
@@ -31,22 +31,20 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 body: JSON.stringify({ username, password }),
             })
 
-            if (!response.ok) {
-                const errorData = await response
-                    .json()
-                    .catch(() => ({ detail: 'Login failed' }))
-                throw new Error(errorData.detail || 'Invalid credentials')
-            }
-
             const data = await response.json()
 
-            // Store JWT token
-            localStorage.setItem('access_token', data.access_token)
+            if (!response.ok) {
+                throw new Error(data.detail || 'Gagal login ke server')
+            }
 
-            // Call onLogin callback
+            localStorage.setItem('access_token', data.access_token)
+            
+            localStorage.setItem('username', username)
+
             onLogin()
         } catch (err: any) {
-            setError(err.message || 'An error occurred during login')
+            console.error("Login Error:", err)
+            setError(err.message || 'Terjadi kesalahan saat login')
         } finally {
             setLoading(false)
         }
@@ -56,27 +54,23 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className='min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4'>
             <div className='w-full max-w-md'>
                 <div className='bg-white rounded-lg shadow-xl p-8'>
-                    {/* Logo and Title */}
                     <div className='flex flex-col items-center mb-8'>
                         <div className='w-16 h-16 bg-blue-600 rounded-lg flex items-center justify-center mb-4'>
                             <Building2 className='w-8 h-8 text-white' />
                         </div>
-                        <h1 className='text-slate-900'>
-                            Predictive Maintenance Copilot
+                        <h1 className='text-2xl font-bold text-slate-900'>
+                            Predictive Maintenance
                         </h1>
                         <p className='text-slate-600 mt-2'>
-                            Sign in to monitor your fleet
+                            Masuk untuk memonitor mesin
                         </p>
                     </div>
 
-                    {/* Login Form */}
-                    <form
-                        onSubmit={handleSubmit}
-                        className='space-y-4'
-                    >
+                    <form onSubmit={handleSubmit} className='space-y-4'>
                         {error && (
-                            <div className='bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded'>
-                                {error}
+                            <div className='bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded flex items-center gap-2'>
+                                <AlertCircle className="w-4 h-4" />
+                                <span className="text-sm">{error}</span>
                             </div>
                         )}
 
@@ -85,7 +79,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                             <Input
                                 id='username'
                                 type='text'
-                                placeholder='username'
+                                placeholder='Masukkan username'
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 required
@@ -99,7 +93,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                             <Input
                                 id='password'
                                 type='password'
-                                placeholder='Enter your password'
+                                placeholder='Masukkan password'
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
@@ -113,7 +107,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                             className='w-full bg-blue-600 hover:bg-blue-700'
                             disabled={loading}
                         >
-                            {loading ? 'Signing In...' : 'Sign In'}
+                            {loading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+                                    Verifikasi...
+                                </>
+                            ) : 'Sign In'}
                         </Button>
                     </form>
                 </div>
